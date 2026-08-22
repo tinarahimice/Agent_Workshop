@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Workshop local state
+storage/index/*
+storage/ocr/*
+!storage/index/.gitkeep
+!storage/ocr/.gitkeep
+
+# Generated binary workshop scans (run generate-data)
+data/scanned/*.png
+!data/scanned/.gitkeep

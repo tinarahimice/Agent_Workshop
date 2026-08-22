@@ -1,0 +1,19 @@
+NovaTech FAQ
+
+Q: How can I track my order?
+A: Use the tracking link emailed after dispatch.
+
+Q: How long does shipping take?
+A: Standard shipping takes 3–5 business days; express shipping takes 1–2.
+
+Q: Can I cancel an order?
+A: Yes, within two hours of placing it if fulfillment has not begun.
+
+Q: Which payment methods are supported?
+A: Visa, Mastercard, NovaPay, and PayPal.
+
+Q: Can I change my delivery address?
+A: Contact support before the order is dispatched.
+
+Q: How do I contact support?
+A: Email support@novatech.example, Monday–Friday, 09:00–17:00 fictional local time.

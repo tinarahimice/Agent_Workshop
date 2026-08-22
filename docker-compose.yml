@@ -1,0 +1,52 @@
+services:
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+    volumes: [redis-data:/data]
+  app:
+    build: .
+    env_file: .env
+    environment: [REDIS_URL=redis://redis:6379/0]
+    depends_on:
+      redis: {condition: service_healthy}
+    volumes: [./data:/app/data, ./storage:/app/storage]
+    profiles: [cli]
+  ui:
+    build: .
+    command: streamlit run streamlit_app.py --server.address=0.0.0.0 --server.port=8501
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      # Used when LLM_PROVIDER=ollama; ignored by the OpenAI-compatible path.
+      OLLAMA_BASE_URL: http://ollama:11434
+    depends_on:
+      redis: {condition: service_healthy}
+    ports: ["8501:8501"]
+    volumes: [./data:/app/data, ./storage:/app/storage]
+  worker:
+    build: .
+    command: python -m src.main worker
+    env_file: .env
+    environment: [REDIS_URL=redis://redis:6379/0]
+    depends_on:
+      redis: {condition: service_healthy}
+    volumes: [./data:/app/data, ./storage:/app/storage]
+    restart: unless-stopped
+  ollama:
+    image: ollama/ollama:0.12.9
+    profiles: [ollama]
+    ports: ["11434:11434"]
+    volumes: [ollama-data:/root/.ollama]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+volumes:
+  redis-data:
+  ollama-data:
