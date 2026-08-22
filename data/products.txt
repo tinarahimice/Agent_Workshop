@@ -1,0 +1,73 @@
+NovaTech Product Catalog (fictional)
+
+Product: NovaBook Air
+SKU: NBA-100
+Category: Laptop
+Price: $1200
+Warranty: 24 months
+Stock: Available
+Description: Lightweight laptop for everyday productivity.
+
+Product: NovaBook Pro
+SKU: NBP-200
+Category: Laptop
+Price: $1800
+Warranty: 36 months
+Stock: Available
+Description: Performance laptop for creative professionals.
+
+Product: NovaPhone X
+SKU: NPX-300
+Category: Phone
+Price: $1000
+Warranty: 24 months
+Stock: Low stock
+Description: Flagship phone with an advanced camera.
+
+Product: NovaPhone Lite
+SKU: NPL-310
+Category: Phone
+Price: $600
+Warranty: 18 months
+Stock: Available
+Description: Approachable phone with all-day battery.
+
+Product: NovaWatch
+SKU: NW-400
+Category: Wearable
+Price: $300
+Warranty: 12 months
+Stock: Available
+Description: Fitness and notification smartwatch.
+
+Product: NovaBuds
+SKU: NBD-500
+Category: Headphones
+Price: $200
+Warranty: 12 months
+Stock: Available
+Description: Noise-cancelling wireless earbuds.
+
+Product: NovaPad
+SKU: NPD-600
+Category: Tablet
+Price: $800
+Warranty: 24 months
+Stock: Available
+Description: Portable tablet for work and entertainment.
+
+Product: NovaDock
+SKU: NDK-700
+Category: Accessory
+Price: $150
+Warranty: 12 months
+Stock: Back order
+Description: USB-C desktop dock with dual-display support.
+
+Product: NovaCam
+SKU: NCM-800
+Category: Camera
+Price: $900
+Warranty: 24 months
+Stock: Available
+Description: Compact camera for travel creators.
