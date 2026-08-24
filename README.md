@@ -157,7 +157,7 @@ Switch `LLM_PROVIDER` back to `openai` to use `OPENAI_API_KEY`, `OPENAI_BASE_URL
 | `OPENAI_API_KEY` | Required for grounded answer generation and agent operations |
 | `OPENAI_BASE_URL` | Optional OpenAI-compatible endpoint |
 | `LLM_MODEL` | `gpt-4o-mini` |
-| `LLM_PROVIDER` | `openai`; set to `ollama` for the local fallback |
+| `LLM_PROVIDER` | `openai`; `openrouter` and `openai-compatible` are accepted aliases, or use `ollama` for the local fallback |
 | `OLLAMA_BASE_URL` | `http://localhost:11434`; Compose overrides it to `http://ollama:11434` |
 | `OLLAMA_MODEL` | `gemma3:4b` (Gemma 3, 4B parameters) |
 | `OLLAMA_REQUEST_TIMEOUT` | `120` seconds, useful for local CPU inference |

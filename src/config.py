@@ -1,7 +1,7 @@
 """Typed, centralized workshop configuration."""
 from functools import lru_cache
 from pathlib import Path
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,10 +36,32 @@ class Settings(BaseSettings):
     index_dir: Path = ROOT / "storage/index"
     prompt_path: Path = ROOT / "prompts/system_prompt.txt"
 
+    @field_validator("llm_provider", mode="before")
+    @classmethod
+    def normalize_llm_provider(cls, value: object) -> object:
+        """Accept common names for an OpenAI-compatible endpoint.
+
+        OpenRouter and similar gateways still use the OpenAI client configured
+        by ``OPENAI_BASE_URL``. Treating those labels as a separate backend made
+        an otherwise valid container configuration fail during application
+        startup.
+        """
+        if not isinstance(value, str):
+            return value
+        provider = value.strip().lower()
+        if not provider:
+            return "openai"
+        if provider in {"openrouter", "openai-compatible", "openai_compatible"}:
+            return "openai"
+        return provider
+
     @model_validator(mode="after")
     def valid_chunks(self):
         if self.llm_provider not in {"openai", "ollama"}:
-            raise ValueError("LLM_PROVIDER must be either 'openai' or 'ollama'")
+            raise ValueError(
+                f"Unsupported LLM_PROVIDER={self.llm_provider!r}; use 'openai' "
+                "for OpenAI-compatible APIs (including OpenRouter), or 'ollama'"
+            )
         if self.chunk_overlap >= self.chunk_size:
             raise ValueError("CHUNK_OVERLAP must be smaller than CHUNK_SIZE")
         if self.rerank_top_n > self.retrieval_top_k:
