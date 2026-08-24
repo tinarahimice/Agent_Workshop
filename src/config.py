@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     embedding_model: str = "jina-embeddings-v3"
     reranker_model: str = "jina-reranker-v2-base-multilingual"
     redis_url: str = "redis://localhost:6379/0"
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_collection: str = "bitteck_knowledge"
+    sparse_model: str = "Qdrant/bm25"
+    hybrid_alpha: float = Field(0.5, ge=0.0, le=1.0)
     cache_enabled: bool = True
     cache_ttl_seconds: int = Field(600, ge=1)
     chunk_size: int = Field(512, ge=64)
