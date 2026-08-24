@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from src.agent import run_agent
 from src.config import get_settings
-from src.ingest import build_index
+from src.ingest import build_index, qdrant_client
 from src.logging_config import configure_logging
 from src.ocr import process_all
 from src.queue import JobQueue, JobType
@@ -54,9 +54,15 @@ async def health(settings) -> None:
         ),
         "jina_configured": bool(settings.jina_api_key),
         "index_exists": (settings.index_dir / "index_version.json").exists(),
+        "qdrant": False,
     }
     try: checks["redis"]=bool(await get_redis(settings).ping())
     except Exception as exc: checks["redis_error"]=f"Unavailable: {exc}"
+    try:
+        checks["qdrant"]=await asyncio.to_thread(
+            qdrant_client(settings).collection_exists, settings.qdrant_collection
+        )
+    except Exception as exc: checks["qdrant_error"]=f"Unavailable: {exc}"
     print(json.dumps(checks,indent=2))
 async def amain() -> int:
     settings=get_settings(); configure_logging(settings.log_level)

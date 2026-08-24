@@ -14,9 +14,12 @@ Text Documents ───→ Ingestion
                         │
                     Chunking
                         │
-                   Embeddings
-                        │
-                  Vector Index
+                  ┌─────┴─────┐
+                  ↓           ↓
+            Dense vectors  BM25 sparse
+                  └─────┬─────┘
+                        ↓
+                Qdrant hybrid search
                         │
                 Jina AI Reranker
                         │
@@ -44,8 +47,9 @@ User → Streamlit/CLI → Agent
 ```
 
 * **OCR** uses replaceable `OCRService` behavior backed by local Tesseract. It converts supported synthetic scans into plain text in `storage/ocr`; one bad scan is logged and does not stop batch OCR.
-* **Ingestion** loads both `data/*.txt` and `storage/ocr/*.txt`. A `SentenceSplitter` makes overlapping chunks; `jina-embeddings-v3` maps each chunk to numbers encoding semantic similarity; LlamaIndex persists a vector index in `storage/index`.
-* **Reranking** sends the eight initially retrieved candidates to `jina-reranker-v2-base-multilingual`, which scores query/document relevance and keeps the best three. This makes the distinction between fast vector retrieval and more precise reranking visible in the workshop.
+* **Ingestion** loads both `data/*.txt` and `storage/ocr/*.txt`. A `SentenceSplitter` makes overlapping chunks; `jina-embeddings-v3` creates dense semantic vectors while `Qdrant/bm25` creates sparse lexical vectors. Both are stored in the `bitteck_knowledge` Qdrant collection.
+* **Hybrid retrieval** runs dense and BM25 searches together in Qdrant and fuses their candidates. `HYBRID_ALPHA=0.5` gives the semantic and lexical paths equal weight; `1.0` favors only dense similarity and `0.0` only sparse similarity.
+* **Reranking** sends the eight hybrid candidates to `jina-reranker-v2-base-multilingual`, which scores query/document relevance and keeps the best three. This makes the distinction between fast vector retrieval and more precise reranking visible in the workshop.
 * **RAG** embeds a question with Jina AI, reranks the nearest chunks, and asks the OpenAI-compatible LLM for a grounded answer with source filenames. It loads rather than rebuilds the persisted index.
 * **Function calling** lets the LLM select named functions while Python—not the model—does discount and tax arithmetic.
 * **Agent** is LlamaIndex's workflow `FunctionAgent`. It can search first and calculate second. Its system prompt is loaded only from `prompts/system_prompt.txt`.
@@ -54,7 +58,19 @@ User → Streamlit/CLI → Agent
 * **Redis queue** atomically moves jobs from pending to processing and records each state in a job hash. Failed jobs are retried and ultimately retained as failed.
 * **Worker** performs slow OCR/ingestion away from the caller and shuts down cleanly on SIGINT/SIGTERM. An OCR job extracts the image and then updates the index.
 
-`CHUNK_SIZE=512` keeps chunks understandable while retaining product records; `CHUNK_OVERLAP=50` carries limited context across boundaries. `RETRIEVAL_TOP_K=8` provides candidates and `RERANK_TOP_N=3` controls the final context. This intentionally offers one clear retrieval pipeline, not a framework of strategies.
+`CHUNK_SIZE=512` keeps chunks understandable while retaining product records; `CHUNK_OVERLAP=50` carries limited context across boundaries. `RETRIEVAL_TOP_K=8` provides candidates and `RERANK_TOP_N=3` controls the final context.
+
+### BM25, in this workshop's pipeline
+
+BM25 is a **lexical ranking** algorithm: instead of asking whether two passages have a similar meaning, it rewards passages containing the query's actual terms. It improves basic term counting in three important ways:
+
+1. **Term frequency (TF):** a query term appearing in a chunk is useful, but repeatedly adding the same word gives diminishing returns.
+2. **Inverse document frequency (IDF):** a rare term such as a product code is more informative than a common term such as “the”.
+3. **Length normalization:** a long chunk does not win merely because it has more opportunities to contain a term.
+
+A common form is `score(D,Q) = Σ IDF(q) × TF(q,D) × (k₁ + 1) / (TF(q,D) + k₁ × (1 - b + b × |D| / avgdl))`. Here `D` is a chunk, `Q` is the question, `|D|` is its length, and `avgdl` is the average chunk length. `k₁` controls term-frequency saturation and `b` controls length normalization.
+
+The trade-off is easy to demonstrate: dense retrieval can connect “money back” with “return policy”, while BM25 is particularly strong for an exact token such as `NovaBook`, `$1200`, or a policy identifier. The hybrid retriever combines both candidate lists, then the Jina reranker makes the final relevance decision. The teaching flow is therefore **Question → dense embedding + BM25 sparse query → Qdrant fusion → Jina reranking → context → LLM answer**.
 
 ## Project tree
 
@@ -76,8 +92,8 @@ python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python -m src.main generate-data      # creates the two local PNG scans (not committed)
 python -m src.main ocr                # direct/batch OCR (continues on a bad image)
-docker compose up -d redis
-python -m src.main ingest             # build/persist; `reindex` clears first
+docker compose up -d redis qdrant
+python -m src.main ingest             # replace the Qdrant collection snapshot
 python -m src.main rag "What is BitTeck's return policy?"
 python -m src.main agent "Find the price of NovaBook Air and apply a 20% discount."
 python -m src.main health             # Redis, key presence, index; no paid call
@@ -85,6 +101,14 @@ streamlit run streamlit_app.py         # UI at http://localhost:8501
 ```
 
 Generated PNG files are intentionally ignored by Git because the review system does not accept binary diffs; `generate-data` deterministically recreates `product_catalog.png` and `warranty_policy.png` before the OCR demo.
+
+Tesseract is an operating-system executable, not only a Python package. For
+local OCR, install it first (`apt-get install tesseract-ocr` on Debian/Ubuntu or
+`brew install tesseract` on macOS). If it is installed outside `PATH`, set
+`TESSERACT_CMD=/full/path/to/tesseract`. The project Docker image already
+installs it; rebuild an older image with `docker compose build --no-cache`.
+When the executable is absent, batch OCR now fails once with these instructions
+instead of logging one identical failure per image and exiting successfully.
 
 `ingest` writes a fresh persisted index from current documents. `reindex` first removes the old persisted index. Neither query command silently rebuilds it.
 
@@ -134,6 +158,24 @@ open http://localhost:8501
 
 Switch `LLM_PROVIDER` back to `openai` to use `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `LLM_MODEL`. No application code changes are needed.
 
+### GapGPT (OpenAI-compatible)
+
+GapGPT uses the same OpenAI-compatible client path; it is not a third LLM
+implementation. Configure its API key in `OPENAI_API_KEY` and its endpoint in
+`OPENAI_BASE_URL`:
+
+```dotenv
+OPENAI_API_KEY=your-gapgpt-key
+OPENAI_BASE_URL=https://api.gapgpt.app/v1
+LLM_MODEL=gpt-4
+LLM_PROVIDER=gapgpt
+```
+
+The settings loader normalizes `gapgpt` to the internal `openai` backend. An
+empty `OPENAI_API_KEY` is sufficient to start the UI, but an LLM request will
+fail with an actionable missing-key error. `JINA_API_KEY` is independently
+required for ingestion, hybrid retrieval, and reranking.
+
 ### Environment
 
 | Variable | Purpose / default |
@@ -141,7 +183,7 @@ Switch `LLM_PROVIDER` back to `openai` to use `OPENAI_API_KEY`, `OPENAI_BASE_URL
 | `OPENAI_API_KEY` | Required for grounded answer generation and agent operations |
 | `OPENAI_BASE_URL` | Optional OpenAI-compatible endpoint |
 | `LLM_MODEL` | `gpt-4o-mini` |
-| `LLM_PROVIDER` | `openai`; set to `ollama` for the local fallback |
+| `LLM_PROVIDER` | `openai`; `gapgpt`, `openrouter`, and `openai-compatible` are accepted aliases, or use `ollama` for the local fallback |
 | `OLLAMA_BASE_URL` | `http://localhost:11434`; Compose overrides it to `http://ollama:11434` |
 | `OLLAMA_MODEL` | `gemma3:4b` (Gemma 3, 4B parameters) |
 | `OLLAMA_REQUEST_TIMEOUT` | `120` seconds, useful for local CPU inference |
@@ -149,17 +191,20 @@ Switch `LLM_PROVIDER` back to `openai` to use `OPENAI_API_KEY`, `OPENAI_BASE_URL
 | `EMBEDDING_MODEL` | `jina-embeddings-v3` |
 | `RERANKER_MODEL` | `jina-reranker-v2-base-multilingual` |
 | `REDIS_URL` | `redis://localhost:6379/0` locally; Compose overrides host to `redis` |
+| `QDRANT_URL`, `QDRANT_COLLECTION` | `http://localhost:6333`, `bitteck_knowledge`; Compose overrides the host to `qdrant` |
+| `SPARSE_MODEL`, `HYBRID_ALPHA` | `Qdrant/bm25`, `0.5`; lexical model and dense/sparse fusion balance |
 | `CACHE_ENABLED`, `CACHE_TTL_SECONDS` | `true`, `600` |
 | `CHUNK_SIZE`, `CHUNK_OVERLAP` | `512`, `50` |
 | `RETRIEVAL_TOP_K`, `RERANK_TOP_N` | Retrieve `8` vector candidates, retain `3` reranked chunks |
 | `JOB_MAX_RETRIES` | `3` retries before failed state |
 | `LOG_LEVEL` | `INFO`; use `DEBUG` for CLI tracebacks |
+| `TESSERACT_CMD` | `tesseract`; executable name or full path used by local OCR |
 
 No key is logged, baked into the image, or committed: Compose injects keys from `.env` at container runtime. Ollama mode does not require `OPENAI_API_KEY`. OCR paths must exist below `data/scanned`, calculator percentages are bounded, and there is no shell/Python execution tool. If Redis is unavailable, start it and retry; if the index/key is missing, follow the corrective CLI message. Tesseract is installed by the Docker image; local users must install its executable separately. Jina embedding and reranking use Jina AI's hosted API, so the app/worker containers require outbound HTTPS even when answer generation uses local Ollama.
 
 ## Workshop demo sequence
 
-1. **Normal RAG** — Run `python -m src.main rag "What is BitTeck's return policy?"`. Explain **Question → Jina embedding → Vector retrieval → Jina reranking → Relevant chunks → LLM → Answer** and find the deliberately specific 21-calendar-day rule.
+1. **Hybrid RAG** — Run `python -m src.main rag "What is BitTeck's return policy?"`. Explain **Question → Jina dense embedding + BM25 terms → Qdrant hybrid retrieval → Jina reranking → Relevant chunks → LLM → Answer** and find the deliberately specific 21-calendar-day rule.
 2. **Redis cache** — Repeat that exact command. The first logs `CACHE MISS`/`CACHE SET`; the second logs `CACHE HIT`. Avoiding duplicate generation reduces latency, work, and API cost.
 3. **Function calling** — Run `python -m src.main agent "Calculate a 20% discount on $1200."`. The agent selects deterministic Python; the answer is `$960`.
 4. **RAG + function calling** — Ask `python -m src.main agent "Find the price of NovaBook Air and calculate its price after a 20% discount."`: **RAG → $1200 → calculator → $960**. Observable tool names, arguments, results, and final answer are logged—not hidden reasoning.
@@ -167,4 +212,4 @@ No key is logged, baked into the image, or committed: Compose injects keys from 
 
 ## Tests and limitations
 
-Run `pytest -q` and `python -m compileall -q src scripts tests`; unit tests use fake Redis and no paid model call. End-to-end embedding/reranking requires a reachable Jina AI API, answer generation/agent execution requires a reachable OpenAI-compatible API, and OCR requires Tesseract. This educational queue keeps processing payloads recoverable but intentionally does not implement distributed leases or automatic recovery of a worker killed mid-job; an operator can inspect `workshop:queue:processing`.
+Run `pytest -q` and `python -m compileall -q src scripts`; unit tests use fake Redis and no paid model call. The first BM25 use downloads its FastEmbed model. End-to-end ingestion/search requires Qdrant and a reachable Jina AI API, answer generation/agent execution requires a reachable OpenAI-compatible API, and OCR requires Tesseract. This educational queue keeps processing payloads recoverable but intentionally does not implement distributed leases or automatic recovery of a worker killed mid-job; an operator can inspect `workshop:queue:processing`.
