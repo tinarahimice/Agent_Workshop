@@ -1,11 +1,12 @@
-"""LlamaIndex document -> chunks -> embeddings -> persistent index pipeline."""
+"""Documents -> chunks -> dense and BM25 sparse vectors -> Qdrant pipeline."""
 import hashlib
 import json
-import shutil
 from pathlib import Path
-from llama_index.core import Document, Settings as LlamaSettings, VectorStoreIndex
+from llama_index.core import Document, Settings as LlamaSettings, StorageContext, VectorStoreIndex
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.jinaai import JinaEmbedding
+from llama_index.vector_stores.qdrant import QdrantVectorStore
+from qdrant_client import QdrantClient
 from src.config import Settings, get_settings
 VERSION_FILE = "index_version.json"
 
@@ -26,7 +27,8 @@ def fingerprint(settings: Settings) -> str:
     digest=hashlib.sha256()
     digest.update(
         f"{settings.chunk_size}:{settings.chunk_overlap}:{settings.embedding_model}:"
-        f"{settings.reranker_model}:{settings.retrieval_top_k}:{settings.rerank_top_n}".encode()
+        f"{settings.reranker_model}:{settings.sparse_model}:{settings.hybrid_alpha}:"
+        f"{settings.qdrant_collection}:{settings.retrieval_top_k}:{settings.rerank_top_n}".encode()
     )
     for path in document_paths(settings): digest.update(path.name.encode()+path.read_bytes())
     return digest.hexdigest()[:16]
@@ -43,14 +45,33 @@ def configure_embedding(settings: Settings) -> None:
         api_key=settings.jina_api_key,
     )
 
+def qdrant_client(settings: Settings) -> QdrantClient:
+    """Create the shared HTTP client without embedding credentials in code."""
+    return QdrantClient(url=settings.qdrant_url)
+
+def qdrant_vector_store(settings: Settings, client: QdrantClient | None = None) -> QdrantVectorStore:
+    """Configure dense + BM25 sparse vectors and server-side hybrid fusion."""
+    return QdrantVectorStore(
+        client=client or qdrant_client(settings),
+        collection_name=settings.qdrant_collection,
+        enable_hybrid=True,
+        fastembed_sparse_model=settings.sparse_model,
+    )
+
 def build_index(reindex: bool = False, settings: Settings | None = None) -> str:
     settings=settings or get_settings(); configure_embedding(settings)
     docs=load_documents(settings)
     if not docs: raise RuntimeError("No documents found; run `python -m src.main generate-data`.")
-    if reindex and settings.index_dir.exists(): shutil.rmtree(settings.index_dir)
+    client=qdrant_client(settings)
+    # Every ingestion is a snapshot replacement, so removed documents cannot
+    # survive in Qdrant. ``reindex`` remains an explicit workshop command.
+    if client.collection_exists(settings.qdrant_collection):
+        client.delete_collection(settings.qdrant_collection)
     settings.index_dir.mkdir(parents=True, exist_ok=True)
     nodes=split_documents(docs, settings.chunk_size, settings.chunk_overlap)
-    index=VectorStoreIndex(nodes); index.storage_context.persist(persist_dir=str(settings.index_dir))
+    vector_store=qdrant_vector_store(settings, client)
+    storage_context=StorageContext.from_defaults(vector_store=vector_store)
+    VectorStoreIndex(nodes, storage_context=storage_context)
     version=fingerprint(settings)
     (settings.index_dir / VERSION_FILE).write_text(json.dumps({"version":version,"documents":len(docs),"chunks":len(nodes)}, indent=2))
     return version
