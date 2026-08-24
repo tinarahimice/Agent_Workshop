@@ -1,11 +1,11 @@
 import logging
 import hashlib
 from pydantic import BaseModel
-from llama_index.core import StorageContext, load_index_from_storage
+from llama_index.core import VectorStoreIndex
 from llama_index.postprocessor.jinaai_rerank import JinaRerank
 from src.cache import RagCache
 from src.config import Settings, get_settings
-from src.ingest import configure_embedding, read_index_version
+from src.ingest import configure_embedding, qdrant_vector_store, read_index_version
 from src.llm import create_llm
 from src.redis_client import get_redis
 log=logging.getLogger("RAG")
@@ -19,6 +19,7 @@ def rag_cache_version(index_version: str, settings: Settings) -> str:
     """Invalidate answers when either indexed data or retrieval models change."""
     retrieval_config = (
         f"{settings.embedding_model}:{settings.reranker_model}:"
+        f"{settings.sparse_model}:{settings.hybrid_alpha}:{settings.qdrant_collection}:"
         f"{settings.retrieval_top_k}:{settings.rerank_top_n}:"
         f"{settings.llm_provider}:{settings.llm_model}:{settings.ollama_model}"
     )
@@ -33,7 +34,7 @@ async def query_knowledge_base(question: str, settings: Settings | None = None, 
     cached=await cache.get(question,version)
     if cached: return RagResult(**cached,cached=True)
     settings.require_jina_api_key(); configure_embedding(settings)
-    index=load_index_from_storage(StorageContext.from_defaults(persist_dir=str(settings.index_dir)))
+    index=VectorStoreIndex.from_vector_store(qdrant_vector_store(settings))
     reranker = JinaRerank(
         api_key=settings.jina_api_key,
         model=settings.reranker_model,
@@ -42,6 +43,9 @@ async def query_knowledge_base(question: str, settings: Settings | None = None, 
     engine=index.as_query_engine(
         llm=create_llm(settings),
         similarity_top_k=settings.retrieval_top_k,
+        sparse_top_k=settings.retrieval_top_k,
+        vector_store_query_mode="hybrid",
+        alpha=settings.hybrid_alpha,
         node_postprocessors=[reranker],
     )
     response=await engine.aquery("Answer only from the retrieved BitTeck context. If absent, say unavailable. Question: "+question)
