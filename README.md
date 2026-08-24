@@ -150,6 +150,24 @@ open http://localhost:8501
 
 Switch `LLM_PROVIDER` back to `openai` to use `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `LLM_MODEL`. No application code changes are needed.
 
+### GapGPT (OpenAI-compatible)
+
+GapGPT uses the same OpenAI-compatible client path; it is not a third LLM
+implementation. Configure its API key in `OPENAI_API_KEY` and its endpoint in
+`OPENAI_BASE_URL`:
+
+```dotenv
+OPENAI_API_KEY=your-gapgpt-key
+OPENAI_BASE_URL=https://api.gapgpt.app/v1
+LLM_MODEL=gpt-4
+LLM_PROVIDER=gapgpt
+```
+
+The settings loader normalizes `gapgpt` to the internal `openai` backend. An
+empty `OPENAI_API_KEY` is sufficient to start the UI, but an LLM request will
+fail with an actionable missing-key error. `JINA_API_KEY` is independently
+required for ingestion, hybrid retrieval, and reranking.
+
 ### Environment
 
 | Variable | Purpose / default |
@@ -157,7 +175,7 @@ Switch `LLM_PROVIDER` back to `openai` to use `OPENAI_API_KEY`, `OPENAI_BASE_URL
 | `OPENAI_API_KEY` | Required for grounded answer generation and agent operations |
 | `OPENAI_BASE_URL` | Optional OpenAI-compatible endpoint |
 | `LLM_MODEL` | `gpt-4o-mini` |
-| `LLM_PROVIDER` | `openai`; `openrouter` and `openai-compatible` are accepted aliases, or use `ollama` for the local fallback |
+| `LLM_PROVIDER` | `openai`; `gapgpt`, `openrouter`, and `openai-compatible` are accepted aliases, or use `ollama` for the local fallback |
 | `OLLAMA_BASE_URL` | `http://localhost:11434`; Compose overrides it to `http://ollama:11434` |
 | `OLLAMA_MODEL` | `gemma3:4b` (Gemma 3, 4B parameters) |
 | `OLLAMA_REQUEST_TIMEOUT` | `120` seconds, useful for local CPU inference |

@@ -41,17 +41,22 @@ class Settings(BaseSettings):
     def normalize_llm_provider(cls, value: object) -> object:
         """Accept common names for an OpenAI-compatible endpoint.
 
-        OpenRouter and similar gateways still use the OpenAI client configured
-        by ``OPENAI_BASE_URL``. Treating those labels as a separate backend made
-        an otherwise valid container configuration fail during application
-        startup.
+        OpenRouter, GapGPT, and similar gateways still use the OpenAI client
+        configured by ``OPENAI_BASE_URL``. Treating those labels as separate
+        backends makes an otherwise valid container configuration fail during
+        application startup.
         """
         if not isinstance(value, str):
             return value
         provider = value.strip().lower()
         if not provider:
             return "openai"
-        if provider in {"openrouter", "openai-compatible", "openai_compatible"}:
+        if provider in {
+            "gapgpt",
+            "openrouter",
+            "openai-compatible",
+            "openai_compatible",
+        }:
             return "openai"
         return provider
 
@@ -60,7 +65,8 @@ class Settings(BaseSettings):
         if self.llm_provider not in {"openai", "ollama"}:
             raise ValueError(
                 f"Unsupported LLM_PROVIDER={self.llm_provider!r}; use 'openai' "
-                "for OpenAI-compatible APIs (including OpenRouter), or 'ollama'"
+                "for OpenAI-compatible APIs (including GapGPT and OpenRouter), "
+                "or 'ollama'"
             )
         if self.chunk_overlap >= self.chunk_size:
             raise ValueError("CHUNK_OVERLAP must be smaller than CHUNK_SIZE")
