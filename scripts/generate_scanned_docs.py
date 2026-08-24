@@ -3,8 +3,8 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 ROOT = Path(__file__).resolve().parents[1]
 PAGES = {
- "product_catalog.png": ["NOVATECH SUPPLEMENTAL CATALOG", "Product: NovaMonitor Ultra", "SKU: NMU-900", "Category: Monitor", "Price: $850", "Warranty: 36 months", "Stock: Available", "Description: 32-inch color-accurate display."],
- "warranty_policy.png": ["NOVATECH SPECIAL WARRANTY NOTICE", "NovaMonitor Ultra pixel guarantee:", "During the first 90 calendar days,", "one or more bright pixels qualifies the", "display for warranty replacement.", "Proof of purchase is required."],
+ "product_catalog.png": ["BitTeck SUPPLEMENTAL CATALOG", "Product: NovaMonitor Ultra", "SKU: NMU-900", "Category: Monitor", "Price: $850", "Warranty: 36 months", "Stock: Available", "Description: 32-inch color-accurate display."],
+ "warranty_policy.png": ["BitTeck SPECIAL WARRANTY NOTICE", "NovaMonitor Ultra pixel guarantee:", "During the first 90 calendar days,", "one or more bright pixels qualifies the", "display for warranty replacement.", "Proof of purchase is required."],
 }
 def make_page(lines: list[str], target: Path) -> None:
     image = Image.new("L", (1400, 900), 242); draw = ImageDraw.Draw(image); font = ImageFont.load_default(size=32)

@@ -44,7 +44,7 @@ async def query_knowledge_base(question: str, settings: Settings | None = None, 
         similarity_top_k=settings.retrieval_top_k,
         node_postprocessors=[reranker],
     )
-    response=await engine.aquery("Answer only from the retrieved NovaTech context. If absent, say unavailable. Question: "+question)
+    response=await engine.aquery("Answer only from the retrieved BitTeck context. If absent, say unavailable. Question: "+question)
     sources=sorted({node.node.metadata.get("file_name","unknown") for node in response.source_nodes})
     result=RagResult(answer=str(response),sources=sources)
     await cache.set(question,version,result.model_dump(exclude={"cached"}))

@@ -1,6 +1,6 @@
 # llm-agent-workshop
 
-A small, production-minded teaching project that follows **Documents → OCR → Ingestion → Chunking → Embeddings → Reranking → RAG → Function Calling → Agent** using only fictional NovaTech data. Python 3.12, current LlamaIndex workflow agents, a Jina AI embedding/reranking pipeline, an OpenAI-compatible or local Ollama LLM, Streamlit, and async `redis-py` are used—without an arbitrary-code tool.
+A small, production-minded teaching project that follows **Documents → OCR → Ingestion → Chunking → Embeddings → Reranking → RAG → Function Calling → Agent** using only fictional BitTeck data. Python 3.12, current LlamaIndex workflow agents, a Jina AI embedding/reranking pipeline, an OpenAI-compatible or local Ollama LLM, Streamlit, and async `redis-py` are used—without an arbitrary-code tool.
 
 ## Architecture
 
@@ -78,7 +78,7 @@ python -m src.main generate-data      # creates the two local PNG scans (not com
 python -m src.main ocr                # direct/batch OCR (continues on a bad image)
 docker compose up -d redis
 python -m src.main ingest             # build/persist; `reindex` clears first
-python -m src.main rag "What is NovaTech's return policy?"
+python -m src.main rag "What is BitTeck's return policy?"
 python -m src.main agent "Find the price of NovaBook Air and apply a 20% discount."
 python -m src.main health             # Redis, key presence, index; no paid call
 streamlit run streamlit_app.py         # UI at http://localhost:8501
@@ -118,7 +118,7 @@ For a host-installed Ollama:
 ```bash
 ollama pull gemma3:4b
 # in .env: LLM_PROVIDER=ollama
-python -m src.main rag "What is NovaTech's return policy?"
+python -m src.main rag "What is BitTeck's return policy?"
 streamlit run streamlit_app.py
 ```
 
@@ -159,7 +159,7 @@ No key is logged, baked into the image, or committed: Compose injects keys from 
 
 ## Workshop demo sequence
 
-1. **Normal RAG** — Run `python -m src.main rag "What is NovaTech's return policy?"`. Explain **Question → Jina embedding → Vector retrieval → Jina reranking → Relevant chunks → LLM → Answer** and find the deliberately specific 21-calendar-day rule.
+1. **Normal RAG** — Run `python -m src.main rag "What is BitTeck's return policy?"`. Explain **Question → Jina embedding → Vector retrieval → Jina reranking → Relevant chunks → LLM → Answer** and find the deliberately specific 21-calendar-day rule.
 2. **Redis cache** — Repeat that exact command. The first logs `CACHE MISS`/`CACHE SET`; the second logs `CACHE HIT`. Avoiding duplicate generation reduces latency, work, and API cost.
 3. **Function calling** — Run `python -m src.main agent "Calculate a 20% discount on $1200."`. The agent selects deterministic Python; the answer is `$960`.
 4. **RAG + function calling** — Ask `python -m src.main agent "Find the price of NovaBook Air and calculate its price after a 20% discount."`: **RAG → $1200 → calculator → $960**. Observable tool names, arguments, results, and final answer are logged—not hidden reasoning.

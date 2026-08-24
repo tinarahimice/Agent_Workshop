@@ -1,4 +1,4 @@
-NovaTech FAQ
+BitTeck FAQ
 
 Q: How can I track my order?
 A: Use the tracking link emailed after dispatch.
@@ -16,4 +16,4 @@ Q: Can I change my delivery address?
 A: Contact support before the order is dispatched.
 
 Q: How do I contact support?
-A: Email support@novatech.example, Monday–Friday, 09:00–17:00 fictional local time.
+A: Email support@BitTeck.example, Monday–Friday, 09:00–17:00 fictional local time.

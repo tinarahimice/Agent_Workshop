@@ -1,4 +1,4 @@
-NovaTech Product Catalog (fictional)
+BitTeck Product Catalog (fictional)
 
 Product: NovaBook Air
 SKU: NBA-100

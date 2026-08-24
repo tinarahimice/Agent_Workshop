@@ -14,7 +14,7 @@ from src.redis_client import close_redis, get_redis
 from src.worker import run_worker
 
 def parser() -> argparse.ArgumentParser:
-    p=argparse.ArgumentParser(prog="llm-agent-workshop",description="NovaTech OCR, RAG, and agent workshop")
+    p=argparse.ArgumentParser(prog="llm-agent-workshop",description="BitTeck OCR, RAG, and agent workshop")
     sub=p.add_subparsers(dest="command",required=True)
     sub.add_parser("generate-data"); sub.add_parser("ocr"); sub.add_parser("ingest"); sub.add_parser("reindex"); sub.add_parser("worker"); sub.add_parser("health")
     for name in ("rag","agent"):

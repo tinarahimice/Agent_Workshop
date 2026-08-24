@@ -23,8 +23,8 @@ async def answer(question: str, mode: str) -> tuple[str, list[str], bool | None]
 
 settings = get_settings()
 configure_logging(settings.log_level)
-st.set_page_config(page_title="NovaTech AI Workshop", page_icon="🧭")
-st.title("🧭 NovaTech AI Workshop")
+st.set_page_config(page_title="AI Workshop", page_icon="🧭")
+st.title("AI Workshop")
 st.caption("OCR → Jina Embeddings → Vector Search → Jina Reranker → RAG → Agent")
 
 with st.sidebar:
@@ -48,7 +48,7 @@ for message in st.session_state.messages:
         if message.get("details"):
             st.caption(message["details"])
 
-if question := st.chat_input("Ask about a NovaTech product or policy…"):
+if question := st.chat_input("Ask about a BitTeck product or policy…"):
     st.session_state.messages.append({"role": "user", "content": question})
     with st.chat_message("user"):
         st.markdown(question)

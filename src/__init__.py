@@ -1,1 +1,1 @@
-"""NovaTech LLM agent workshop."""
+"""BitTeck LLM agent workshop."""

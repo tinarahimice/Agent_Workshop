@@ -18,7 +18,7 @@ def calculate_final_price(price: float, tax_percent: float) -> float:
     result=round(_valid(price,"price")*(1+_percent(tax_percent,"tax_percent")/100),2)
     log.info("TOOL RESULT calculate_final_price=%s",result); return result
 async def search_knowledge_base(question: str) -> str:
-    """Search NovaTech products, prices, warranties, shipping, returns, FAQs, and company policies."""
+    """Search BitTeck products, prices, warranties, shipping, returns, FAQs, and company policies."""
     log.info("TOOL SELECTED search_knowledge_base arguments=%s",question)
     result=await query_knowledge_base(question)
     return f"{result.answer}\nSources: {', '.join(result.sources) or 'none'}"
