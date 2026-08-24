@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     rerank_top_n: int = Field(3, ge=1)
     job_max_retries: int = Field(3, ge=0)
     log_level: str = "INFO"
+    tesseract_cmd: str = "tesseract"
     data_dir: Path = ROOT / "data"
     ocr_dir: Path = ROOT / "storage/ocr"
     index_dir: Path = ROOT / "storage/index"

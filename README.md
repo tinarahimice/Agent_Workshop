@@ -102,6 +102,14 @@ streamlit run streamlit_app.py         # UI at http://localhost:8501
 
 Generated PNG files are intentionally ignored by Git because the review system does not accept binary diffs; `generate-data` deterministically recreates `product_catalog.png` and `warranty_policy.png` before the OCR demo.
 
+Tesseract is an operating-system executable, not only a Python package. For
+local OCR, install it first (`apt-get install tesseract-ocr` on Debian/Ubuntu or
+`brew install tesseract` on macOS). If it is installed outside `PATH`, set
+`TESSERACT_CMD=/full/path/to/tesseract`. The project Docker image already
+installs it; rebuild an older image with `docker compose build --no-cache`.
+When the executable is absent, batch OCR now fails once with these instructions
+instead of logging one identical failure per image and exiting successfully.
+
 `ingest` writes a fresh persisted index from current documents. `reindex` first removes the old persisted index. Neither query command silently rebuilds it.
 
 Queue commands:
@@ -190,6 +198,7 @@ required for ingestion, hybrid retrieval, and reranking.
 | `RETRIEVAL_TOP_K`, `RERANK_TOP_N` | Retrieve `8` vector candidates, retain `3` reranked chunks |
 | `JOB_MAX_RETRIES` | `3` retries before failed state |
 | `LOG_LEVEL` | `INFO`; use `DEBUG` for CLI tracebacks |
+| `TESSERACT_CMD` | `tesseract`; executable name or full path used by local OCR |
 
 No key is logged, baked into the image, or committed: Compose injects keys from `.env` at container runtime. Ollama mode does not require `OPENAI_API_KEY`. OCR paths must exist below `data/scanned`, calculator percentages are bounded, and there is no shell/Python execution tool. If Redis is unavailable, start it and retry; if the index/key is missing, follow the corrective CLI message. Tesseract is installed by the Docker image; local users must install its executable separately. Jina embedding and reranking use Jina AI's hosted API, so the app/worker containers require outbound HTTPS even when answer generation uses local Ollama.
 
