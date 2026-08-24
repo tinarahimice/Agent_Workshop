@@ -21,5 +21,5 @@ def test_resolve_tesseract_command_accepts_configured_path(monkeypatch) -> None:
 def test_missing_tesseract_has_actionable_error(monkeypatch) -> None:
     monkeypatch.setattr("src.ocr.shutil.which", lambda command: None)
 
-    with pytest.raises(RuntimeError, match="TESSERACT_CMD"):
+    with pytest.raises(RuntimeError, match="docker compose --profile cli run --build"):
         resolve_tesseract_command("tesseract")

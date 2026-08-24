@@ -32,11 +32,12 @@ def resolve_tesseract_command(command: str) -> str:
     if resolved:
         return resolved
     raise RuntimeError(
-        f"Tesseract executable {configured!r} was not found. Install it with "
-        "`apt-get install tesseract-ocr` (Debian/Ubuntu) or "
-        "`brew install tesseract` (macOS), set TESSERACT_CMD to its full path, "
-        "or run OCR in the Docker image. After changing Docker dependencies, "
-        "rebuild with `docker compose build --no-cache`."
+        f"Tesseract executable {configured!r} was not found. `pytesseract` does "
+        "not include the native OCR engine. Either run the ready-to-use image "
+        "with `docker compose --profile cli run --build --rm app ocr`, or install "
+        "it locally with `sudo apt-get install tesseract-ocr` (Debian/Ubuntu), "
+        "`brew install tesseract` (macOS), or `choco install tesseract` (Windows). "
+        "If it is already installed, set TESSERACT_CMD to its full path."
     )
 
 def normalize_text(text: str) -> str:

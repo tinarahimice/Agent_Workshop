@@ -103,12 +103,23 @@ streamlit run streamlit_app.py         # UI at http://localhost:8501
 Generated PNG files are intentionally ignored by Git because the review system does not accept binary diffs; `generate-data` deterministically recreates `product_catalog.png` and `warranty_policy.png` before the OCR demo.
 
 Tesseract is an operating-system executable, not only a Python package. For
-local OCR, install it first (`apt-get install tesseract-ocr` on Debian/Ubuntu or
-`brew install tesseract` on macOS). If it is installed outside `PATH`, set
+the quickest setup that does **not** install anything on the host, run:
+
+```bash
+docker compose --profile cli run --build --rm app generate-data
+docker compose --profile cli run --build --rm app ocr
+```
+
+The `--build` flag matters if the local image predates the Dockerfile's
+Tesseract installation. To run OCR directly with `python -m src.main ocr`,
+install the native engine first (`sudo apt-get install tesseract-ocr` on
+Debian/Ubuntu, `brew install tesseract` on macOS, or `choco install tesseract`
+on Windows). Installing `pytesseract` alone is not sufficient. If the executable
+is installed outside `PATH`, set
 `TESSERACT_CMD=/full/path/to/tesseract`. The project Docker image already
-installs it; rebuild an older image with `docker compose build --no-cache`.
-When the executable is absent, batch OCR now fails once with these instructions
-instead of logging one identical failure per image and exiting successfully.
+installs it. When the executable is absent, batch OCR fails once with these
+instructions instead of logging one identical failure per image and exiting
+successfully.
 
 `ingest` writes a fresh persisted index from current documents. `reindex` first removes the old persisted index. Neither query command silently rebuilds it.
 
