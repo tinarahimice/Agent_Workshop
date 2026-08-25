@@ -1,7 +1,9 @@
 """Documents -> chunks -> dense and BM25 sparse vectors -> Qdrant pipeline."""
 import hashlib
+import ipaddress
 import json
 from pathlib import Path
+from urllib.parse import urlparse
 from llama_index.core import Document, Settings as LlamaSettings, StorageContext, VectorStoreIndex
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.jinaai import JinaEmbedding
@@ -51,8 +53,27 @@ def configure_embedding(settings: Settings) -> None:
     )
 
 def qdrant_client(settings: Settings) -> QdrantClient:
-    """Create the shared HTTP client without embedding credentials in code."""
-    return QdrantClient(url=settings.qdrant_url, timeout=settings.qdrant_timeout)
+    """Create the shared HTTP client without proxying loopback traffic.
+
+    HTTPX honors the process proxy environment by default.  On developer
+    machines whose proxy configuration does not exclude localhost, that sends
+    Qdrant requests to the proxy instead of the service listening on port 6333.
+    Keep normal proxy handling for remote Qdrant instances, but bypass it for
+    loopback URLs.
+    """
+    hostname = urlparse(settings.qdrant_url).hostname
+    is_loopback = hostname == "localhost"
+    if hostname:
+        try:
+            is_loopback = is_loopback or ipaddress.ip_address(hostname).is_loopback
+        except ValueError:
+            pass
+
+    return QdrantClient(
+        url=settings.qdrant_url,
+        timeout=settings.qdrant_timeout,
+        trust_env=not is_loopback,
+    )
 
 def qdrant_collection_exists(client: QdrantClient, settings: Settings) -> bool:
     """Check Qdrant separately so connection failures identify the failing service."""

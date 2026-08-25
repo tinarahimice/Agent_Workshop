@@ -152,6 +152,8 @@ is persisted in the bind-mounted `storage/index` directory, while the vectors
 are persisted by Qdrant's named volume.
 
 If ingestion times out, use its stage-specific error to isolate the dependency.
+Local Qdrant requests bypass `HTTP_PROXY`/`HTTPS_PROXY` automatically, so a
+developer proxy cannot intercept `localhost`, `127.0.0.1`, or `::1` traffic.
 A Qdrant error means the service or port `6333` is unreachable; check it with
 `docker compose up -d qdrant` and `curl http://localhost:6333/healthz`. An index
 creation/Jina error means the host needs outbound HTTPS access to `api.jina.ai`
