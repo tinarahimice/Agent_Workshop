@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4o-mini"
     llm_provider: str = "openai"
     ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "gemma3:4b"
+    ollama_model: str = "gemma3:270m"
     ollama_request_timeout: float = Field(120.0, gt=0)
     jina_api_key: str = ""
     embedding_model: str = "jina-embeddings-v3"

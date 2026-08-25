@@ -163,12 +163,12 @@ requests use `QDRANT_TIMEOUT` seconds (default `15`).
 
 ### Local Ollama fallback (Gemma 3, 4B)
 
-The requested “Gemma 4” fallback is configured as Ollama's **4-billion-parameter Gemma model**, `gemma3:4b`. It replaces only answer generation and agent tool selection; Jina AI still performs embedding and reranking, so `JINA_API_KEY` remains required.
+The requested “Gemma 4” fallback is configured as Ollama's **4-billion-parameter Gemma model**, `gemma3:270m`. It replaces only answer generation and agent tool selection; Jina AI still performs embedding and reranking, so `JINA_API_KEY` remains required.
 
 For a host-installed Ollama:
 
 ```bash
-ollama pull gemma3:4b
+ollama pull gemma3:270m
 # in .env: LLM_PROVIDER=ollama
 python -m src.main rag "What is BitTeck's return policy?"
 streamlit run streamlit_app.py
@@ -179,7 +179,7 @@ For a fully containerized Ollama and UI:
 ```bash
 # Set LLM_PROVIDER=ollama in .env first.
 docker compose --profile ollama up -d redis ollama
-docker compose --profile ollama exec ollama ollama pull gemma3:4b
+docker compose --profile ollama exec ollama ollama pull gemma3:270m
 docker compose --profile ollama up -d ui worker
 open http://localhost:8501
 ```
@@ -213,7 +213,7 @@ required for ingestion, hybrid retrieval, and reranking.
 | `LLM_MODEL` | `gpt-4o-mini` |
 | `LLM_PROVIDER` | `openai`; `gapgpt`, `openrouter`, and `openai-compatible` are accepted aliases, or use `ollama` for the local fallback |
 | `OLLAMA_BASE_URL` | `http://localhost:11434`; Compose overrides it to `http://ollama:11434` |
-| `OLLAMA_MODEL` | `gemma3:4b` (Gemma 3, 4B parameters) |
+| `OLLAMA_MODEL` | `gemma3:270m` (Gemma 3, 4B parameters) |
 | `OLLAMA_REQUEST_TIMEOUT` | `120` seconds, useful for local CPU inference |
 | `JINA_API_KEY` | Required for Jina AI embedding and reranking operations |
 | `EMBEDDING_MODEL` | `jina-embeddings-v3` |
