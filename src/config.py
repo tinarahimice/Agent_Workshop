@@ -16,8 +16,12 @@ class Settings(BaseSettings):
     ollama_model: str = "gemma3:270m"
     ollama_request_timeout: float = Field(120.0, gt=0)
     jina_api_key: str = ""
+    embedding_provider: str = "jina"
     embedding_model: str = "jina-embeddings-v3"
+    reranker_provider: str = "jina"
     reranker_model: str = "jina-reranker-v2-base-multilingual"
+    ollama_embedding_model: str = "embeddinggemma"
+    ollama_reranker_model: str = "pdurugyan/qwen3-reranker-0.6b-q8_0"
     redis_url: str = "redis://localhost:6379/0"
     qdrant_url: str = "http://localhost:6333"
     qdrant_timeout: float = Field(15.0, gt=0)
@@ -38,7 +42,7 @@ class Settings(BaseSettings):
     index_dir: Path = ROOT / "storage/index"
     prompt_path: Path = ROOT / "prompts/system_prompt.txt"
 
-    @field_validator("llm_provider", mode="before")
+    @field_validator("llm_provider", "embedding_provider", "reranker_provider", mode="before")
     @classmethod
     def normalize_llm_provider(cls, value: object) -> object:
         """Accept common names for an OpenAI-compatible endpoint.
@@ -70,6 +74,12 @@ class Settings(BaseSettings):
                 "for OpenAI-compatible APIs (including GapGPT and OpenRouter), "
                 "or 'ollama'"
             )
+        for name, provider in (
+            ("EMBEDDING_PROVIDER", self.embedding_provider),
+            ("RERANKER_PROVIDER", self.reranker_provider),
+        ):
+            if provider not in {"jina", "ollama"}:
+                raise ValueError(f"Unsupported {name}={provider!r}; use 'jina' or 'ollama'")
         if self.chunk_overlap >= self.chunk_size:
             raise ValueError("CHUNK_OVERLAP must be smaller than CHUNK_SIZE")
         if self.rerank_top_n > self.retrieval_top_k:
@@ -81,7 +91,9 @@ class Settings(BaseSettings):
             raise RuntimeError("OPENAI_API_KEY is missing; copy .env.example to .env and add it.")
 
     def require_jina_api_key(self) -> None:
-        if not self.jina_api_key:
+        if (
+            self.embedding_provider == "jina" or self.reranker_provider == "jina"
+        ) and not self.jina_api_key:
             raise RuntimeError("JINA_API_KEY is missing; create a Jina AI key and add it to .env.")
 
 @lru_cache

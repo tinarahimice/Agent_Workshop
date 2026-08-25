@@ -1,6 +1,6 @@
 # llm-agent-workshop
 
-A small, production-minded teaching project that follows **Documents → OCR → Ingestion → Chunking → Embeddings → Reranking → RAG → Function Calling → Agent** using only fictional BitTeck data. Python 3.12, current LlamaIndex workflow agents, a Jina AI embedding/reranking pipeline, an OpenAI-compatible or local Ollama LLM, Streamlit, and async `redis-py` are used—without an arbitrary-code tool.
+A small, production-minded teaching project that follows **Documents → OCR → Ingestion → Chunking → Embeddings → Reranking → RAG → Function Calling → Agent** using only fictional BitTeck data. Python 3.12, current LlamaIndex workflow agents, selectable Jina AI or local Ollama embedding/reranking, an OpenAI-compatible or local Ollama LLM, Streamlit, and async `redis-py` are used—without an arbitrary-code tool.
 
 ## Architecture
 
@@ -21,7 +21,7 @@ Text Documents ───→ Ingestion
                         ↓
                 Qdrant hybrid search
                         │
-                Jina AI Reranker
+             Selected Reranker
                         │
                         ↓
                       RAG
@@ -156,23 +156,27 @@ Local Qdrant requests bypass `HTTP_PROXY`/`HTTPS_PROXY` automatically, so a
 developer proxy cannot intercept `localhost`, `127.0.0.1`, or `::1` traffic.
 A Qdrant error means the service or port `6333` is unreachable; check it with
 `docker compose up -d qdrant` and `curl http://localhost:6333/healthz`. An index
-creation/Jina error means the host needs outbound HTTPS access to `api.jina.ai`
-and a valid `JINA_API_KEY`; on the first run, FastEmbed also downloads the BM25
-model. Set `LOG_LEVEL=DEBUG` to include the underlying traceback. Qdrant HTTP
+creation error means the selected embedding provider is unavailable (for Jina,
+check `JINA_API_KEY` and outbound HTTPS; for Ollama, check the service and pulled
+model). On the first run, FastEmbed also downloads the BM25 model. Set
+`LOG_LEVEL=DEBUG` to include the underlying traceback. Qdrant HTTP
 requests use `QDRANT_TIMEOUT` seconds (default `15`).
 
 ### Run with Ollama
 
-The default local model is Ollama's lightweight `gemma3:270m`. Ollama replaces
-only answer generation and agent tool selection; Jina AI still performs
-embedding and reranking, so a valid `JINA_API_KEY` and outbound HTTPS access
-remain required. `OPENAI_API_KEY` may stay empty in this mode.
+The default local generation model is Ollama's lightweight `gemma3:270m`.
+Embedding and reranking can independently use Jina AI or Ollama. For a fully
+local pipeline set `EMBEDDING_PROVIDER=ollama` and
+`RERANKER_PROVIDER=ollama`; neither API key is then required.
 
 For a host-installed Ollama:
 
 ```bash
 ollama pull gemma3:270m
+ollama pull embeddinggemma
+ollama pull pdurugyan/qwen3-reranker-0.6b-q8_0
 # in .env: LLM_PROVIDER=ollama
+# in .env: EMBEDDING_PROVIDER=ollama and RERANKER_PROVIDER=ollama
 python -m src.main rag "What is BitTeck's return policy?"
 streamlit run streamlit_app.py
 ```
@@ -184,10 +188,11 @@ root in this order:
 # 1. Create the runtime configuration. Do this only once.
 cp .env.example .env
 
-# 2. Edit .env and set these values (JINA_API_KEY must be a real key):
+# 2. Edit .env and select the fully local providers:
 # LLM_PROVIDER=ollama
 # OLLAMA_MODEL=gemma3:270m
-# JINA_API_KEY=your-jina-api-key
+# EMBEDDING_PROVIDER=ollama
+# RERANKER_PROVIDER=ollama
 
 # 3. Build the Python application image and start its dependencies.
 docker compose build
@@ -195,6 +200,8 @@ docker compose --profile ollama up -d redis qdrant ollama
 
 # 4. Download the model into Ollama's persistent named volume.
 docker compose --profile ollama exec ollama ollama pull gemma3:270m
+docker compose --profile ollama exec ollama ollama pull embeddinggemma
+docker compose --profile ollama exec ollama ollama pull pdurugyan/qwen3-reranker-0.6b-q8_0
 
 # 5. Confirm that Ollama can see the downloaded model.
 docker compose --profile ollama exec ollama ollama list
@@ -239,8 +246,8 @@ Inside Compose, the application must reach Ollama at
 `http://ollama:11434`, not `localhost`; the Compose file overrides
 `OLLAMA_BASE_URL` for `app`, `ui`, and `worker`. The host-facing
 `http://localhost:11434` address is only for commands run directly on the host.
-If a query reports a missing index, rerun step 6's `ingest` command. If it
-reports a Jina error, verify `JINA_API_KEY` and outbound HTTPS connectivity.
+If a query reports a missing index, rerun step 6's `ingest` command. Provider
+errors identify whether the configured Jina or Ollama service needs attention.
 
 Switch `LLM_PROVIDER` back to `openai` to use `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `LLM_MODEL`. No application code changes are needed.
 
@@ -273,9 +280,11 @@ required for ingestion, hybrid retrieval, and reranking.
 | `OLLAMA_BASE_URL` | `http://localhost:11434`; Compose overrides it to `http://ollama:11434` |
 | `OLLAMA_MODEL` | `gemma3:270m` (Gemma 3, 4B parameters) |
 | `OLLAMA_REQUEST_TIMEOUT` | `120` seconds, useful for local CPU inference |
-| `JINA_API_KEY` | Required for Jina AI embedding and reranking operations |
-| `EMBEDDING_MODEL` | `jina-embeddings-v3` |
-| `RERANKER_MODEL` | `jina-reranker-v2-base-multilingual` |
+| `JINA_API_KEY` | Required only when either retrieval provider is `jina` |
+| `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL` | `jina`, `jina-embeddings-v3` |
+| `RERANKER_PROVIDER`, `RERANKER_MODEL` | `jina`, `jina-reranker-v2-base-multilingual` |
+| `OLLAMA_EMBEDDING_MODEL` | `embeddinggemma` |
+| `OLLAMA_RERANKER_MODEL` | `pdurugyan/qwen3-reranker-0.6b-q8_0` |
 | `REDIS_URL` | `redis://localhost:6379/0` locally; Compose overrides host to `redis` |
 | `QDRANT_URL`, `QDRANT_COLLECTION` | `http://localhost:6333`, `bitteck_knowledge`; Compose overrides the host to `qdrant` |
 | `QDRANT_TIMEOUT` | `15` seconds for Qdrant HTTP operations |
@@ -287,11 +296,11 @@ required for ingestion, hybrid retrieval, and reranking.
 | `LOG_LEVEL` | `INFO`; use `DEBUG` for CLI tracebacks |
 | `TESSERACT_CMD` | `tesseract`; executable name or full path used by local OCR |
 
-No key is logged, baked into the image, or committed: Compose injects keys from `.env` at container runtime. Ollama mode does not require `OPENAI_API_KEY`. OCR paths must exist below `data/scanned`, calculator percentages are bounded, and there is no shell/Python execution tool. If Redis is unavailable, start it and retry; if the index/key is missing, follow the corrective CLI message. Tesseract is installed by the Docker image; local users must install its executable separately. Jina embedding and reranking use Jina AI's hosted API, so the app/worker containers require outbound HTTPS even when answer generation uses local Ollama.
+No key is logged, baked into the image, or committed: Compose injects keys from `.env` at container runtime. Fully local Ollama generation and retrieval require no API key, but all three configured models must be pulled first. OCR paths must exist below `data/scanned`, calculator percentages are bounded, and there is no shell/Python execution tool. If Redis is unavailable, start it and retry; if the index is missing, follow the corrective CLI message. Tesseract is installed by the Docker image; local users must install its executable separately.
 
 ## Workshop demo sequence
 
-1. **Hybrid RAG** — Run `python -m src.main rag "What is BitTeck's return policy?"`. Explain **Question → Jina dense embedding + BM25 terms → Qdrant hybrid retrieval → Jina reranking → Relevant chunks → LLM → Answer** and find the deliberately specific 21-calendar-day rule.
+1. **Hybrid RAG** — Run `python -m src.main rag "What is BitTeck's return policy?"`. Explain **Question → dense embedding + BM25 terms → Qdrant hybrid retrieval → reranking → Relevant chunks → LLM → Answer** and find the deliberately specific 21-calendar-day rule.
 2. **Redis cache** — Repeat that exact command. The first logs `CACHE MISS`/`CACHE SET`; the second logs `CACHE HIT`. Avoiding duplicate generation reduces latency, work, and API cost.
 3. **Function calling** — Run `python -m src.main agent "Calculate a 20% discount on $1200."`. The agent selects deterministic Python; the answer is `$960`.
 4. **RAG + function calling** — Ask `python -m src.main agent "Find the price of NovaBook Air and calculate its price after a 20% discount."`: **RAG → $1200 → calculator → $960**. Observable tool names, arguments, results, and final answer are logged—not hidden reasoning.

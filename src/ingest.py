@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from llama_index.core import Document, Settings as LlamaSettings, StorageContext, VectorStoreIndex
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.jinaai import JinaEmbedding
+from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 from qdrant_client import AsyncQdrantClient, QdrantClient
 from src.config import Settings, get_settings
@@ -33,8 +34,9 @@ def split_documents(documents: list[Document], chunk_size: int, overlap: int):
 def fingerprint(settings: Settings) -> str:
     digest=hashlib.sha256()
     digest.update(
-        f"{settings.chunk_size}:{settings.chunk_overlap}:{settings.embedding_model}:"
-        f"{settings.reranker_model}:{settings.sparse_model}:{settings.hybrid_alpha}:"
+        f"{settings.chunk_size}:{settings.chunk_overlap}:{settings.embedding_provider}:"
+        f"{settings.embedding_model}:{settings.ollama_embedding_model}:"
+        f"{settings.reranker_provider}:{settings.reranker_model}:{settings.ollama_reranker_model}:"
         f"{settings.qdrant_collection}:{settings.retrieval_top_k}:{settings.rerank_top_n}".encode()
     )
     for path in document_paths(settings): digest.update(path.name.encode()+path.read_bytes())
@@ -46,11 +48,18 @@ def read_index_version(index_dir: Path) -> str:
     return json.loads(path.read_text())["version"]
 
 def configure_embedding(settings: Settings) -> None:
-    settings.require_jina_api_key()
-    LlamaSettings.embed_model = JinaEmbedding(
-        model=settings.embedding_model,
-        api_key=settings.jina_api_key,
-    )
+    if settings.embedding_provider == "ollama":
+        LlamaSettings.embed_model = OllamaEmbedding(
+            model_name=settings.ollama_embedding_model,
+            base_url=settings.ollama_base_url,
+            request_timeout=settings.ollama_request_timeout,
+        )
+    else:
+        settings.require_jina_api_key()
+        LlamaSettings.embed_model = JinaEmbedding(
+            model=settings.embedding_model,
+            api_key=settings.jina_api_key,
+        )
 
 def qdrant_client(settings: Settings) -> QdrantClient:
     """Create the shared HTTP client without proxying loopback traffic.
@@ -130,10 +139,10 @@ def build_index(reindex: bool = False, settings: Settings | None = None) -> str:
         VectorStoreIndex(nodes, storage_context=storage_context)
     except Exception as exc:
         raise RuntimeError(
-            "Index creation failed while generating Jina embeddings or downloading/"
+            f"Index creation failed while generating {settings.embedding_provider} embeddings or downloading/"
             "running the BM25 sparse model, or while uploading vectors to Qdrant. "
-            "Confirm JINA_API_KEY is valid, outbound HTTPS to api.jina.ai is "
-            "available, and Qdrant remains reachable. The first BM25 run may need "
+            "Confirm the selected embedding service/model is available and Qdrant "
+            "remains reachable. The first BM25 run may need "
             "additional time to download its model. Set LOG_LEVEL=DEBUG for "
             f"the underlying traceback. Original error: {type(exc).__name__}: {exc}"
         ) from exc
