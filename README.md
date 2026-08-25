@@ -144,6 +144,21 @@ docker compose --profile cli run --rm app rag "What is the return policy?"
 docker compose up -d redis ui          # UI at http://localhost:8501
 ```
 
+The `ingest` step is required before the first `rag` or `agent` query and before
+using the UI. Wait for it to print `Index version: ...`; if ingestion fails,
+fix the reported configuration or connectivity problem and rerun it. Starting
+Qdrant or the UI alone does not create an index. The generated version marker
+is persisted in the bind-mounted `storage/index` directory, while the vectors
+are persisted by Qdrant's named volume.
+
+If ingestion times out, use its stage-specific error to isolate the dependency.
+A Qdrant error means the service or port `6333` is unreachable; check it with
+`docker compose up -d qdrant` and `curl http://localhost:6333/healthz`. An index
+creation/Jina error means the host needs outbound HTTPS access to `api.jina.ai`
+and a valid `JINA_API_KEY`; on the first run, FastEmbed also downloads the BM25
+model. Set `LOG_LEVEL=DEBUG` to include the underlying traceback. Qdrant HTTP
+requests use `QDRANT_TIMEOUT` seconds (default `15`).
+
 ### Local Ollama fallback (Gemma 3, 4B)
 
 The requested “Gemma 4” fallback is configured as Ollama's **4-billion-parameter Gemma model**, `gemma3:4b`. It replaces only answer generation and agent tool selection; Jina AI still performs embedding and reranking, so `JINA_API_KEY` remains required.
@@ -203,6 +218,7 @@ required for ingestion, hybrid retrieval, and reranking.
 | `RERANKER_MODEL` | `jina-reranker-v2-base-multilingual` |
 | `REDIS_URL` | `redis://localhost:6379/0` locally; Compose overrides host to `redis` |
 | `QDRANT_URL`, `QDRANT_COLLECTION` | `http://localhost:6333`, `bitteck_knowledge`; Compose overrides the host to `qdrant` |
+| `QDRANT_TIMEOUT` | `15` seconds for Qdrant HTTP operations |
 | `SPARSE_MODEL`, `HYBRID_ALPHA` | `Qdrant/bm25`, `0.5`; lexical model and dense/sparse fusion balance |
 | `CACHE_ENABLED`, `CACHE_TTL_SECONDS` | `true`, `600` |
 | `CHUNK_SIZE`, `CHUNK_OVERLAP` | `512`, `50` |

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     reranker_model: str = "jina-reranker-v2-base-multilingual"
     redis_url: str = "redis://localhost:6379/0"
     qdrant_url: str = "http://localhost:6333"
+    qdrant_timeout: float = Field(15.0, gt=0)
     qdrant_collection: str = "bitteck_knowledge"
     sparse_model: str = "Qdrant/bm25"
     hybrid_alpha: float = Field(0.5, ge=0.0, le=1.0)

@@ -9,6 +9,11 @@ from llama_index.vector_stores.qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
 from src.config import Settings, get_settings
 VERSION_FILE = "index_version.json"
+INDEX_SETUP_HELP = (
+    "Index is missing. Create it first with "
+    "`docker compose --profile cli run --rm app ingest` (Docker) or "
+    "`python -m src.main ingest` (local Python)."
+)
 
 def document_paths(settings: Settings) -> list[Path]:
     return sorted(settings.data_dir.glob("*.txt")) + sorted(settings.ocr_dir.glob("*.txt"))
@@ -35,7 +40,7 @@ def fingerprint(settings: Settings) -> str:
 
 def read_index_version(index_dir: Path) -> str:
     path=index_dir / VERSION_FILE
-    if not path.exists(): raise FileNotFoundError("Index is missing. Run `python -m src.main ingest` first.")
+    if not path.exists(): raise FileNotFoundError(INDEX_SETUP_HELP)
     return json.loads(path.read_text())["version"]
 
 def configure_embedding(settings: Settings) -> None:
@@ -47,7 +52,19 @@ def configure_embedding(settings: Settings) -> None:
 
 def qdrant_client(settings: Settings) -> QdrantClient:
     """Create the shared HTTP client without embedding credentials in code."""
-    return QdrantClient(url=settings.qdrant_url)
+    return QdrantClient(url=settings.qdrant_url, timeout=settings.qdrant_timeout)
+
+def qdrant_collection_exists(client: QdrantClient, settings: Settings) -> bool:
+    """Check Qdrant separately so connection failures identify the failing service."""
+    try:
+        return client.collection_exists(settings.qdrant_collection)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Cannot reach Qdrant at {settings.qdrant_url!r}. Start it with "
+            "`docker compose up -d qdrant`, confirm port 6333 is reachable, "
+            "and then rerun ingestion. "
+            f"Qdrant reported: {type(exc).__name__}: {exc}"
+        ) from exc
 
 def qdrant_vector_store(settings: Settings, client: QdrantClient | None = None) -> QdrantVectorStore:
     """Configure dense + BM25 sparse vectors and server-side hybrid fusion."""
@@ -65,13 +82,23 @@ def build_index(reindex: bool = False, settings: Settings | None = None) -> str:
     client=qdrant_client(settings)
     # Every ingestion is a snapshot replacement, so removed documents cannot
     # survive in Qdrant. ``reindex`` remains an explicit workshop command.
-    if client.collection_exists(settings.qdrant_collection):
+    if qdrant_collection_exists(client, settings):
         client.delete_collection(settings.qdrant_collection)
     settings.index_dir.mkdir(parents=True, exist_ok=True)
     nodes=split_documents(docs, settings.chunk_size, settings.chunk_overlap)
     vector_store=qdrant_vector_store(settings, client)
     storage_context=StorageContext.from_defaults(vector_store=vector_store)
-    VectorStoreIndex(nodes, storage_context=storage_context)
+    try:
+        VectorStoreIndex(nodes, storage_context=storage_context)
+    except Exception as exc:
+        raise RuntimeError(
+            "Index creation failed while generating Jina embeddings or downloading/"
+            "running the BM25 sparse model, or while uploading vectors to Qdrant. "
+            "Confirm JINA_API_KEY is valid, outbound HTTPS to api.jina.ai is "
+            "available, and Qdrant remains reachable. The first BM25 run may need "
+            "additional time to download its model. Set LOG_LEVEL=DEBUG for "
+            f"the underlying traceback. Original error: {type(exc).__name__}: {exc}"
+        ) from exc
     version=fingerprint(settings)
     (settings.index_dir / VERSION_FILE).write_text(json.dumps({"version":version,"documents":len(docs),"chunks":len(nodes)}, indent=2))
     return version
