@@ -14,6 +14,10 @@ services:
     volumes: [qdrant-data:/qdrant/storage]
   app:
     build: .
+    # Keep the CLI module fixed while allowing `docker compose run app <command>`
+    # to replace only its arguments (for example, `app ingest` or `app rag ...`).
+    entrypoint: ["python", "-m", "src.main"]
+    command: ["health"]
     env_file: .env
     environment: [REDIS_URL=redis://redis:6379/0, QDRANT_URL=http://qdrant:6333]
     depends_on:
