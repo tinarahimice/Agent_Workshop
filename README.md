@@ -161,9 +161,12 @@ and a valid `JINA_API_KEY`; on the first run, FastEmbed also downloads the BM25
 model. Set `LOG_LEVEL=DEBUG` to include the underlying traceback. Qdrant HTTP
 requests use `QDRANT_TIMEOUT` seconds (default `15`).
 
-### Local Ollama fallback (Gemma 3, 4B)
+### Run with Ollama
 
-The requested “Gemma 4” fallback is configured as Ollama's **4-billion-parameter Gemma model**, `gemma3:270m`. It replaces only answer generation and agent tool selection; Jina AI still performs embedding and reranking, so `JINA_API_KEY` remains required.
+The default local model is Ollama's lightweight `gemma3:270m`. Ollama replaces
+only answer generation and agent tool selection; Jina AI still performs
+embedding and reranking, so a valid `JINA_API_KEY` and outbound HTTPS access
+remain required. `OPENAI_API_KEY` may stay empty in this mode.
 
 For a host-installed Ollama:
 
@@ -174,15 +177,70 @@ python -m src.main rag "What is BitTeck's return policy?"
 streamlit run streamlit_app.py
 ```
 
-For a fully containerized Ollama and UI:
+For a fully containerized first run, execute these commands from the repository
+root in this order:
 
 ```bash
-# Set LLM_PROVIDER=ollama in .env first.
-docker compose --profile ollama up -d redis ollama
+# 1. Create the runtime configuration. Do this only once.
+cp .env.example .env
+
+# 2. Edit .env and set these values (JINA_API_KEY must be a real key):
+# LLM_PROVIDER=ollama
+# OLLAMA_MODEL=gemma3:270m
+# JINA_API_KEY=your-jina-api-key
+
+# 3. Build the Python application image and start its dependencies.
+docker compose build
+docker compose --profile ollama up -d redis qdrant ollama
+
+# 4. Download the model into Ollama's persistent named volume.
 docker compose --profile ollama exec ollama ollama pull gemma3:270m
+
+# 5. Confirm that Ollama can see the downloaded model.
+docker compose --profile ollama exec ollama ollama list
+
+# 6. Generate sample files, run OCR, and build the required search index.
+docker compose --profile cli --profile ollama run --rm app generate-data
+docker compose --profile cli --profile ollama run --rm app ocr
+docker compose --profile cli --profile ollama run --rm app ingest
+
+# 7. Check Redis, Qdrant, provider configuration, and index presence.
+docker compose --profile cli --profile ollama run --rm app health
+
+# 8. Run either CLI query (the quotes keep each question one argument).
+docker compose --profile cli --profile ollama run --rm app rag "What is BitTeck's return policy?"
+docker compose --profile cli --profile ollama run --rm app agent "Find the price of NovaBook Air and apply a 20% discount."
+
+# 9. Start the browser UI and background worker.
 docker compose --profile ollama up -d ui worker
-open http://localhost:8501
+# Open http://localhost:8501 in a browser.
 ```
+
+Use `docker compose --profile ollama ps` to inspect container state and
+`docker compose --profile ollama logs -f ui ollama` to follow UI/Ollama logs
+(`Ctrl+C` stops following logs without stopping containers). After source or
+dependency changes, rebuild and recreate the application services with
+`docker compose build && docker compose --profile ollama up -d --force-recreate ui worker`.
+Normal shutdown keeps Redis, Qdrant, and Ollama data in named volumes:
+
+```bash
+docker compose --profile ollama down
+```
+
+To perform a destructive reset, including the downloaded Ollama model, vector
+index, Redis data, and Qdrant data, add `--volumes` and then repeat the pull and
+ingestion steps:
+
+```bash
+docker compose --profile ollama down --volumes
+```
+
+Inside Compose, the application must reach Ollama at
+`http://ollama:11434`, not `localhost`; the Compose file overrides
+`OLLAMA_BASE_URL` for `app`, `ui`, and `worker`. The host-facing
+`http://localhost:11434` address is only for commands run directly on the host.
+If a query reports a missing index, rerun step 6's `ingest` command. If it
+reports a Jina error, verify `JINA_API_KEY` and outbound HTTPS connectivity.
 
 Switch `LLM_PROVIDER` back to `openai` to use `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `LLM_MODEL`. No application code changes are needed.
 
