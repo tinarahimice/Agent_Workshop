@@ -161,7 +161,7 @@ and a valid `JINA_API_KEY`; on the first run, FastEmbed also downloads the BM25
 model. Set `LOG_LEVEL=DEBUG` to include the underlying traceback. Qdrant HTTP
 requests use `QDRANT_TIMEOUT` seconds (default `15`).
 
-### اجرای کامل با Docker و Ollama
+### Run with Ollama
 
 The default local model is Ollama's lightweight `gemma3:270m`. Ollama replaces
 only answer generation and agent tool selection; Jina AI still performs
