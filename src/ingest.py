@@ -9,6 +9,11 @@ from llama_index.vector_stores.qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
 from src.config import Settings, get_settings
 VERSION_FILE = "index_version.json"
+INDEX_SETUP_HELP = (
+    "Index is missing. Create it first with "
+    "`docker compose --profile cli run --rm app ingest` (Docker) or "
+    "`python -m src.main ingest` (local Python)."
+)
 
 def document_paths(settings: Settings) -> list[Path]:
     return sorted(settings.data_dir.glob("*.txt")) + sorted(settings.ocr_dir.glob("*.txt"))
@@ -35,7 +40,7 @@ def fingerprint(settings: Settings) -> str:
 
 def read_index_version(index_dir: Path) -> str:
     path=index_dir / VERSION_FILE
-    if not path.exists(): raise FileNotFoundError("Index is missing. Run `python -m src.main ingest` first.")
+    if not path.exists(): raise FileNotFoundError(INDEX_SETUP_HELP)
     return json.loads(path.read_text())["version"]
 
 def configure_embedding(settings: Settings) -> None:

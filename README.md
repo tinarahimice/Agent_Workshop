@@ -144,6 +144,13 @@ docker compose --profile cli run --rm app rag "What is the return policy?"
 docker compose up -d redis ui          # UI at http://localhost:8501
 ```
 
+The `ingest` step is required before the first `rag` or `agent` query and before
+using the UI. Wait for it to print `Index version: ...`; if ingestion fails,
+fix the reported configuration or connectivity problem and rerun it. Starting
+Qdrant or the UI alone does not create an index. The generated version marker
+is persisted in the bind-mounted `storage/index` directory, while the vectors
+are persisted by Qdrant's named volume.
+
 ### Local Ollama fallback (Gemma 3, 4B)
 
 The requested “Gemma 4” fallback is configured as Ollama's **4-billion-parameter Gemma model**, `gemma3:4b`. It replaces only answer generation and agent tool selection; Jina AI still performs embedding and reranking, so `JINA_API_KEY` remains required.
