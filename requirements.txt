@@ -4,7 +4,9 @@ llama-index-llms-openai==0.6.12
 llama-index-llms-ollama==0.9.0
 llama-index-postprocessor-jinaai-rerank>=0.5
 llama-index-vector-stores-qdrant>=0.8
-qdrant-client[fastembed]>=1.14
+# Keep the client within one minor release of the Compose server. Qdrant warns
+# (and does not guarantee compatibility) when that distance is larger.
+qdrant-client[fastembed]>=1.15,<1.17
 openai==2.8.1
 pydantic==2.12.4
 pydantic-settings==2.12.0

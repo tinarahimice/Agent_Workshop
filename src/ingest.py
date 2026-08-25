@@ -8,7 +8,7 @@ from llama_index.core import Document, Settings as LlamaSettings, StorageContext
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.jinaai import JinaEmbedding
 from llama_index.vector_stores.qdrant import QdrantVectorStore
-from qdrant_client import QdrantClient
+from qdrant_client import AsyncQdrantClient, QdrantClient
 from src.config import Settings, get_settings
 VERSION_FILE = "index_version.json"
 INDEX_SETUP_HELP = (
@@ -75,6 +75,22 @@ def qdrant_client(settings: Settings) -> QdrantClient:
         trust_env=not is_loopback,
     )
 
+def async_qdrant_client(settings: Settings) -> AsyncQdrantClient:
+    """Create the async client required by LlamaIndex's async query path."""
+    hostname = urlparse(settings.qdrant_url).hostname
+    is_loopback = hostname == "localhost"
+    if hostname:
+        try:
+            is_loopback = is_loopback or ipaddress.ip_address(hostname).is_loopback
+        except ValueError:
+            pass
+
+    return AsyncQdrantClient(
+        url=settings.qdrant_url,
+        timeout=settings.qdrant_timeout,
+        trust_env=not is_loopback,
+    )
+
 def qdrant_collection_exists(client: QdrantClient, settings: Settings) -> bool:
     """Check Qdrant separately so connection failures identify the failing service."""
     try:
@@ -91,6 +107,7 @@ def qdrant_vector_store(settings: Settings, client: QdrantClient | None = None) 
     """Configure dense + BM25 sparse vectors and server-side hybrid fusion."""
     return QdrantVectorStore(
         client=client or qdrant_client(settings),
+        aclient=async_qdrant_client(settings),
         collection_name=settings.qdrant_collection,
         enable_hybrid=True,
         fastembed_sparse_model=settings.sparse_model,
