@@ -3,7 +3,13 @@ from pathlib import Path
 import pytest
 
 from src.config import Settings
-from src.ingest import qdrant_client, qdrant_collection_exists, read_index_version
+from src.ingest import (
+    async_qdrant_client,
+    qdrant_client,
+    qdrant_collection_exists,
+    qdrant_vector_store,
+    read_index_version,
+)
 
 
 def test_missing_index_explains_docker_and_local_setup(tmp_path: Path) -> None:
@@ -64,3 +70,39 @@ def test_qdrant_client_keeps_proxy_support_for_remote_url(
     qdrant_client(Settings(qdrant_url="https://qdrant.example.com"))
 
     assert captured["trust_env"] is True
+
+
+def test_async_qdrant_client_bypasses_proxy_for_loopback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_client(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr("src.ingest.AsyncQdrantClient", fake_client)
+
+    async_qdrant_client(Settings(qdrant_url="http://localhost:6333"))
+
+    assert captured["trust_env"] is False
+
+
+def test_vector_store_receives_sync_and_async_clients(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sync_client = object()
+    async_client = object()
+    captured: dict[str, object] = {}
+
+    def fake_vector_store(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr("src.ingest.async_qdrant_client", lambda _settings: async_client)
+    monkeypatch.setattr("src.ingest.QdrantVectorStore", fake_vector_store)
+
+    qdrant_vector_store(Settings(), client=sync_client)  # type: ignore[arg-type]
+
+    assert captured["client"] is sync_client
+    assert captured["aclient"] is async_client
