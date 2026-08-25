@@ -25,7 +25,7 @@ settings = get_settings()
 configure_logging(settings.log_level)
 st.set_page_config(page_title="AI Workshop", page_icon="🧭")
 st.title("AI Workshop")
-st.caption("OCR → Jina Embeddings → Vector Search → Jina Reranker → RAG → Agent")
+st.caption("OCR → Embeddings → Vector Search → Reranker → RAG → Agent")
 
 with st.sidebar:
     st.header("Demo settings")
@@ -33,8 +33,10 @@ with st.sidebar:
     st.write(f"**LLM:** `{settings.llm_provider}`")
     model = settings.ollama_model if settings.llm_provider == "ollama" else settings.llm_model
     st.write(f"**Model:** `{model}`")
-    st.write(f"**Embedding:** `{settings.embedding_model}`")
-    st.write(f"**Reranker:** `{settings.reranker_model}`")
+    embedding_model = settings.ollama_embedding_model if settings.embedding_provider == "ollama" else settings.embedding_model
+    reranker_model = settings.ollama_reranker_model if settings.reranker_provider == "ollama" else settings.reranker_model
+    st.write(f"**Embedding:** `{settings.embedding_provider}/{embedding_model}`")
+    st.write(f"**Reranker:** `{settings.reranker_provider}/{reranker_model}`")
     st.info("RAG shows sources and cache status. Agent can search and then call calculators.")
     if st.button("Clear conversation", use_container_width=True):
         st.session_state.messages = []

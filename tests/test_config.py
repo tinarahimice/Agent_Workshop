@@ -29,6 +29,30 @@ def test_unknown_llm_provider_has_actionable_error() -> None:
         Settings(_env_file=None, llm_provider="unknown")
 
 
+@pytest.mark.parametrize("field", ["embedding_provider", "reranker_provider"])
+def test_retrieval_providers_accept_ollama(field: str) -> None:
+    settings = Settings(_env_file=None, **{field: " OLLAMA "})
+
+    assert getattr(settings, field) == "ollama"
+
+
+@pytest.mark.parametrize("field", ["embedding_provider", "reranker_provider"])
+def test_unknown_retrieval_provider_has_actionable_error(field: str) -> None:
+    with pytest.raises(ValidationError, match="use 'jina' or 'ollama'"):
+        Settings(_env_file=None, **{field: "unknown"})
+
+
+def test_fully_local_retrieval_does_not_require_jina_key() -> None:
+    settings = Settings(
+        _env_file=None,
+        embedding_provider="ollama",
+        reranker_provider="ollama",
+        jina_api_key="",
+    )
+
+    settings.require_jina_api_key()
+
+
 def test_gapgpt_environment_uses_openai_compatible_backend(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://api.gapgpt.app/v1")

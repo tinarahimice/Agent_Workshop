@@ -52,7 +52,13 @@ async def health(settings) -> None:
             if settings.llm_provider == "openai"
             else bool(settings.ollama_base_url and settings.ollama_model)
         ),
-        "jina_configured": bool(settings.jina_api_key),
+        "embedding_provider": settings.embedding_provider,
+        "reranker_provider": settings.reranker_provider,
+        "retrieval_configured": (
+            bool(settings.jina_api_key)
+            if "jina" in {settings.embedding_provider, settings.reranker_provider}
+            else bool(settings.ollama_base_url)
+        ),
         "index_exists": (settings.index_dir / "index_version.json").exists(),
         "qdrant": False,
     }
