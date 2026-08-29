@@ -137,11 +137,11 @@ Docker-only equivalents (the `--profile cli` app is intentionally one-shot):
 
 ```bash
 docker compose build
-docker compose up -d redis worker
-docker compose --profile cli run --rm app generate-data
-docker compose --profile cli run --rm app ingest
-docker compose --profile cli run --rm app rag "What is the return policy?"
-docker compose up -d redis ui          # UI at http://localhost:8501
+docker compose --profile ollama up -d redis qdrant ollama worker
+docker compose --profile cli --profile ollama run --rm app generate-data
+docker compose --profile cli --profile ollama run --rm app ingest
+docker compose --profile cli --profile ollama run --rm app rag "What is the return policy?"
+docker compose --profile ollama up -d redis qdrant ollama ui  # UI at http://localhost:8501
 ```
 
 The `ingest` step is required before the first `rag` or `agent` query and before
