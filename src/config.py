@@ -21,7 +21,9 @@ class Settings(BaseSettings):
     reranker_provider: str = "ollama"
     reranker_model: str = "jina-reranker-v2-base-multilingual"
     ollama_embedding_model: str = "embeddinggemma"
-    ollama_reranker_model: str = "pdurugyan/qwen3-reranker-0.6b-q8_0"
+    # Ollama's /api/generate endpoint requires a generative model. Dedicated
+    # embedding-style reranker weights return HTTP 400 from that endpoint.
+    ollama_reranker_model: str = "qwen3:0.6b"
     redis_url: str = "redis://localhost:6379/0"
     qdrant_url: str = "http://localhost:6333"
     qdrant_timeout: float = Field(15.0, gt=0)

@@ -1,4 +1,4 @@
-"""Node reranking through an Ollama-hosted yes/no reranker model."""
+"""Node reranking through an Ollama-hosted relevance judge."""
 import json
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -9,11 +9,12 @@ from pydantic import Field
 
 
 class OllamaRerank(BaseNodePostprocessor):
-    """Rank retrieved nodes with a local Qwen3 reranker served by Ollama.
+    """Rank retrieved nodes with a local Qwen3 model served by Ollama.
 
-    Qwen3 rerankers answer ``yes`` or ``no`` for a query/document pair. Relevant
-    nodes are placed first, while the hybrid retrieval score provides stable
-    ordering within each group.
+    Every retrieved query/document pair receives a structured relevance score.
+    Nodes are then sorted by that score before only ``top_n`` are returned. A
+    reranking failure is deliberately propagated: RAG must not silently answer
+    from the original retrieval order.
     """
 
     model: str
@@ -21,10 +22,10 @@ class OllamaRerank(BaseNodePostprocessor):
     request_timeout: float = Field(120.0, gt=0)
     top_n: int = Field(3, ge=1)
 
-    def _is_relevant(self, query: str, document: str) -> bool:
+    def _relevance_score(self, query: str, document: str) -> float:
         prompt = (
-            "Judge whether the document is relevant to the query. "
-            "Answer with exactly yes or no.\n"
+            "Score how relevant the document is to the query from 0 to 100. "
+            "Return only the requested JSON object.\n"
             f"Query: {query}\nDocument: {document}"
         )
         request = Request(
@@ -34,6 +35,17 @@ class OllamaRerank(BaseNodePostprocessor):
                     "model": self.model,
                     "prompt": prompt,
                     "stream": False,
+                    "format": {
+                        "type": "object",
+                        "properties": {
+                            "relevance_score": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 100,
+                            }
+                        },
+                        "required": ["relevance_score"],
+                    },
                     "options": {"temperature": 0},
                 }
             ).encode(),
@@ -49,10 +61,16 @@ class OllamaRerank(BaseNodePostprocessor):
                 f"{self.model!r}: {type(exc).__name__}: {exc}. Pull the model "
                 "and confirm Ollama is reachable."
             ) from exc
-        answer = str(payload.get("response", "")).strip().lower()
-        if not answer:
-            raise RuntimeError("Ollama reranker returned an empty response")
-        return answer.startswith("yes")
+        answer = str(payload.get("response", "")).strip()
+        try:
+            score = float(json.loads(answer)["relevance_score"])
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            raise RuntimeError(
+                f"Ollama reranker returned an invalid relevance score: {answer!r}"
+            ) from exc
+        if not 0 <= score <= 100:
+            raise RuntimeError(f"Ollama reranker score is outside 0..100: {score}")
+        return score
 
     def _postprocess_nodes(
         self,
@@ -61,12 +79,15 @@ class OllamaRerank(BaseNodePostprocessor):
     ) -> list[NodeWithScore]:
         if query_bundle is None:
             raise ValueError("OllamaRerank requires a query")
-        ranked = sorted(
-            nodes,
-            key=lambda node: (
-                self._is_relevant(query_bundle.query_str, node.node.get_content()),
-                node.score if node.score is not None else float("-inf"),
-            ),
-            reverse=True,
-        )
+        scored_nodes = []
+        for node in nodes:
+            retrieval_score = node.score if node.score is not None else float("-inf")
+            rerank_score = self._relevance_score(
+                query_bundle.query_str, node.node.get_content()
+            )
+            scored_nodes.append((rerank_score, retrieval_score, node))
+        ranked = [
+            node
+            for _, _, node in sorted(scored_nodes, key=lambda item: item[:2], reverse=True)
+        ]
         return ranked[: self.top_n]

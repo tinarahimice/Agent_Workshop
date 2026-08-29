@@ -59,6 +59,7 @@ def test_defaults_are_fully_local_ollama() -> None:
     assert settings.llm_provider == "ollama"
     assert settings.embedding_provider == "ollama"
     assert settings.reranker_provider == "ollama"
+    assert settings.ollama_reranker_model == "qwen3:0.6b"
 
 
 def test_streamlit_api_models_are_explicit_opt_in() -> None:
