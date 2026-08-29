@@ -1,20 +1,28 @@
 llama-index-core==0.14.12
-llama-index-embeddings-jinaai>=0.6
-llama-index-embeddings-ollama>=0.8,<0.9
+
+llama-index-embeddings-jinaai==0.6.0
+llama-index-embeddings-ollama==0.9.0
 llama-index-llms-openai==0.6.12
 llama-index-llms-ollama==0.9.0
-llama-index-postprocessor-jinaai-rerank>=0.5
-llama-index-vector-stores-qdrant>=0.8
-# Keep the client within one minor release of the Compose server. Qdrant warns
-# (and does not guarantee compatibility) when that distance is larger.
-qdrant-client[fastembed]>=1.15,<1.17
+llama-index-postprocessor-jinaai-rerank==0.5.0
+llama-index-vector-stores-qdrant==0.9.0
+
+# Keep the client compatible with the Qdrant Compose server.
+qdrant-client[fastembed]>=1.16,<1.17
+
 openai==2.8.1
+
 pydantic==2.12.4
 pydantic-settings==2.12.0
+
 redis==7.1.0
-Pillow==12.0.0
+
+# fastembed requires Pillow >=10.3 and <12.
+Pillow==11.3.0
 pytesseract==0.3.13
+
+streamlit==1.51.0
+
 pytest==9.0.1
 pytest-asyncio==1.3.0
 fakeredis==2.32.1
-streamlit==1.51.0

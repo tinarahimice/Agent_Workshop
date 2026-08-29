@@ -47,7 +47,7 @@ User → Streamlit/CLI → Agent
 ```
 
 * **OCR** uses replaceable `OCRService` behavior backed by local Tesseract. It converts supported synthetic scans into plain text in `storage/ocr`; one bad scan is logged and does not stop batch OCR.
-* **Ingestion** loads both `data/*.txt` and `storage/ocr/*.txt`. A `SentenceSplitter` makes overlapping chunks; Ollama’s `embeddinggemma` creates dense semantic vectors by default while `Qdrant/bm25` creates sparse lexical vectors. Both are stored in the `bitteck_knowledge` Qdrant collection.
+* **Ingestion** loads both `data/*.txt` and `storage/ocr/*.txt`. A `SentenceSplitter` makes overlapping chunks; Ollama’s `qwen3-embedding:0.6b` creates dense semantic vectors by default while `Qdrant/bm25` creates sparse lexical vectors. Both are stored in the `bitteck_knowledge` Qdrant collection.
 * **Hybrid retrieval** runs dense and BM25 searches together in Qdrant and fuses their candidates. `HYBRID_ALPHA=0.5` gives the semantic and lexical paths equal weight; `1.0` favors only dense similarity and `0.0` only sparse similarity.
 * **Reranking** sends the eight hybrid candidates to the local Ollama reranker by default, which scores query/document relevance and keeps the best three. Jina is available only in API mode.
 * **RAG** uses local Ollama by default to embed a question, rerank the nearest chunks, and produce a grounded answer with source filenames. It loads rather than rebuilds the persisted index.
@@ -164,7 +164,7 @@ requests use `QDRANT_TIMEOUT` seconds (default `15`).
 
 ### Run with Ollama
 
-The default local generation model is Ollama's tool-capable `qwen3:4b`.
+The default local generation model is Ollama's tool-capable `qwen3:0.6b`.
 Embedding and reranking can independently use Jina AI or Ollama. For a fully
 local pipeline set `EMBEDDING_PROVIDER=ollama` and
 `RERANKER_PROVIDER=ollama`; neither API key is then required.
@@ -172,8 +172,8 @@ local pipeline set `EMBEDDING_PROVIDER=ollama` and
 For a host-installed Ollama:
 
 ```bash
-ollama pull qwen3:4b
-ollama pull embeddinggemma
+ollama pull qwen3:0.6b
+ollama pull qwen3-embedding:0.6b
 ollama pull pdurugyan/qwen3-reranker-0.6b-q8_0
 # .env.example already selects Ollama for all three providers
 python -m src.main rag "What is BitTeck's return policy?"
@@ -194,8 +194,8 @@ docker compose build
 docker compose --profile ollama up -d redis qdrant ollama
 
 # 4. Download the model into Ollama's persistent named volume.
-docker compose --profile ollama exec ollama ollama pull qwen3:4b
-docker compose --profile ollama exec ollama ollama pull embeddinggemma
+docker compose --profile ollama exec ollama ollama pull qwen3:0.6b
+docker compose --profile ollama exec ollama ollama pull qwen3-embedding:0.6b
 docker compose --profile ollama exec ollama ollama pull pdurugyan/qwen3-reranker-0.6b-q8_0
 
 # 5. Confirm that Ollama can see the downloaded model.
@@ -273,12 +273,12 @@ required for ingestion, hybrid retrieval, and reranking.
 | `LLM_MODEL` | `gpt-4o-mini` |
 | `LLM_PROVIDER` | `ollama`; `openai`, `gapgpt`, `openrouter`, and `openai-compatible` opt into a hosted API |
 | `OLLAMA_BASE_URL` | `http://localhost:11434`; Compose overrides it to `http://ollama:11434` |
-| `OLLAMA_MODEL` | `qwen3:4b`, selected for local tool calling |
+| `OLLAMA_MODEL` | `qwen3:0.6b`, selected for local tool calling |
 | `OLLAMA_REQUEST_TIMEOUT` | `120` seconds, useful for local CPU inference |
 | `JINA_API_KEY` | Required only when either retrieval provider is `jina` |
 | `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL` | `ollama` by default; API opt-in uses `jina-embeddings-v3` |
 | `RERANKER_PROVIDER`, `RERANKER_MODEL` | `ollama` by default; API opt-in uses `jina-reranker-v2-base-multilingual` |
-| `OLLAMA_EMBEDDING_MODEL` | `embeddinggemma` |
+| `OLLAMA_EMBEDDING_MODEL` | `qwen3-embedding:0.6b` |
 | `OLLAMA_RERANKER_MODEL` | `pdurugyan/qwen3-reranker-0.6b-q8_0` |
 | `REDIS_URL` | `redis://localhost:6379/0` locally; Compose overrides host to `redis` |
 | `QDRANT_URL`, `QDRANT_COLLECTION` | `http://localhost:6333`, `bitteck_knowledge`; Compose overrides the host to `qdrant` |
