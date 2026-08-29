@@ -67,8 +67,6 @@ if "messages" not in st.session_state:
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-        if message.get("details"):
-            st.caption(message["details"])
 
 if question := st.chat_input("Ask about a BitTeck product or policy…"):
     st.session_state.messages.append({"role": "user", "content": question})
@@ -79,13 +77,8 @@ if question := st.chat_input("Ask about a BitTeck product or policy…"):
         try:
             with st.spinner("Choosing and running the required tools…"):
                 response = asyncio.run(answer(question, settings))
-            details = f"Provider: {settings.llm_provider} · Tools selected automatically"
             st.markdown(response)
-            if details:
-                st.caption(details)
-            st.session_state.messages.append(
-                {"role": "assistant", "content": response, "details": details}
-            )
+            st.session_state.messages.append({"role": "assistant", "content": response})
         except Exception as exc:
             message = f"Unable to answer: {exc}"
             st.error(message)
