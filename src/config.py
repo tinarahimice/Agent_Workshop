@@ -18,12 +18,10 @@ class Settings(BaseSettings):
     jina_api_key: str = ""
     embedding_provider: str = "ollama"
     embedding_model: str = "jina-embeddings-v3"
-    reranker_provider: str = "ollama"
+    reranker_provider: str = "fastembed"
     reranker_model: str = "jina-reranker-v2-base-multilingual"
     ollama_embedding_model: str = "embeddinggemma"
-    # Ollama's /api/generate endpoint requires a generative model. Dedicated
-    # embedding-style reranker weights return HTTP 400 from that endpoint.
-    ollama_reranker_model: str = "qwen3:0.6b"
+    fastembed_reranker_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
     redis_url: str = "redis://localhost:6379/0"
     qdrant_url: str = "http://localhost:6333"
     qdrant_timeout: float = Field(15.0, gt=0)
@@ -80,8 +78,14 @@ class Settings(BaseSettings):
             ("EMBEDDING_PROVIDER", self.embedding_provider),
             ("RERANKER_PROVIDER", self.reranker_provider),
         ):
-            if provider not in {"jina", "ollama"}:
-                raise ValueError(f"Unsupported {name}={provider!r}; use 'jina' or 'ollama'")
+            allowed = (
+                {"jina", "ollama"}
+                if name == "EMBEDDING_PROVIDER"
+                else {"fastembed", "jina"}
+            )
+            if provider not in allowed:
+                choices = " or ".join(repr(item) for item in sorted(allowed))
+                raise ValueError(f"Unsupported {name}={provider!r}; use {choices}")
         if self.chunk_overlap >= self.chunk_size:
             raise ValueError("CHUNK_OVERLAP must be smaller than CHUNK_SIZE")
         if self.rerank_top_n > self.retrieval_top_k:
@@ -110,7 +114,7 @@ class Settings(BaseSettings):
             else {
                 "llm_provider": "ollama",
                 "embedding_provider": "ollama",
-                "reranker_provider": "ollama",
+                "reranker_provider": "fastembed",
             }
         )
         return self.model_copy(update=providers)

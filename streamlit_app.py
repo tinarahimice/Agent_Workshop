@@ -44,8 +44,8 @@ with st.sidebar:
         else settings.embedding_model
     )
     reranker_model = (
-        settings.ollama_reranker_model
-        if settings.reranker_provider == "ollama"
+        settings.fastembed_reranker_model
+        if settings.reranker_provider == "fastembed"
         else settings.reranker_model
     )
     st.write(f"**Embedding:** `{settings.embedding_provider}/{embedding_model}`")
