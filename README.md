@@ -53,7 +53,7 @@ User → Streamlit/CLI → Agent
 * **RAG** uses local Ollama by default to embed a question, rerank the nearest chunks, and produce a grounded answer with source filenames. It loads rather than rebuilds the persisted index.
 * **Function calling** lets the LLM select named functions while Python—not the model—does discount and tax arithmetic.
 * **Agent** is LlamaIndex's workflow `FunctionAgent`. It can search first and calculate second. Its system prompt is loaded only from `prompts/system_prompt.txt`.
-* **UI** has no manual Agent/RAG switch: the agent infers the necessary tool from each question. A sidebar toggle explicitly opts into configured GPT-compatible and Jina APIs; it is off by default.
+* **UI** has no manual Agent/RAG switch: the agent infers the necessary tool from each question and receives the visible conversation history so short follow-ups retain context. A sidebar toggle explicitly opts into configured GPT-compatible and Jina APIs; it is off by default.
 * **Redis cache** is cache-aside: normalized questions are SHA-256 hashed, results expire after 600 seconds, and HIT/MISS/SET events are visible. The document/config fingerprint embedded in every key changes after indexing, making old answers unreachable without a costly key scan.
 * **Redis queue** atomically moves jobs from pending to processing and records each state in a job hash. Failed jobs are retried and ultimately retained as failed.
 * **Worker** performs slow OCR/ingestion away from the caller and shuts down cleanly on SIGINT/SIGTERM. An OCR job extracts the image and then updates the index.

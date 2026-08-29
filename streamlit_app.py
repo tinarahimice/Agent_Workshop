@@ -3,15 +3,19 @@ import asyncio
 
 import streamlit as st
 
-from src.agent import run_agent
+from src.agent import ConversationMessage, run_agent
 from src.config import Settings, get_settings
 from src.logging_config import configure_logging
 from src.redis_client import close_redis
 
 
-async def answer(question: str, settings: Settings) -> str:
+async def answer(
+    question: str,
+    settings: Settings,
+    chat_history: list[ConversationMessage],
+) -> str:
     try:
-        return await run_agent(question, settings)
+        return await run_agent(question, settings, chat_history)
     finally:
         # Streamlit reruns this file; do not retain a client bound to an old event loop.
         await close_redis()
@@ -76,7 +80,9 @@ if question := st.chat_input("Ask about a BitTeck product or policy…"):
     with st.chat_message("assistant"):
         try:
             with st.spinner("Choosing and running the required tools…"):
-                response = asyncio.run(answer(question, settings))
+                response = asyncio.run(
+                    answer(question, settings, st.session_state.messages[:-1])
+                )
             st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
         except Exception as exc:
