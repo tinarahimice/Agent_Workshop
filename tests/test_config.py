@@ -53,6 +53,28 @@ def test_fully_local_retrieval_does_not_require_jina_key() -> None:
     settings.require_jina_api_key()
 
 
+def test_defaults_are_fully_local_ollama() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.llm_provider == "ollama"
+    assert settings.embedding_provider == "ollama"
+    assert settings.reranker_provider == "ollama"
+
+
+def test_streamlit_api_models_are_explicit_opt_in() -> None:
+    settings = Settings(_env_file=None)
+
+    local = settings.for_streamlit(False)
+    cloud = settings.for_streamlit(True)
+
+    assert (local.llm_provider, local.embedding_provider, local.reranker_provider) == (
+        "ollama", "ollama", "ollama"
+    )
+    assert (cloud.llm_provider, cloud.embedding_provider, cloud.reranker_provider) == (
+        "openai", "jina", "jina"
+    )
+
+
 def test_gapgpt_environment_uses_openai_compatible_backend(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://api.gapgpt.app/v1")

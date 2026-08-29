@@ -1,6 +1,6 @@
 # llm-agent-workshop
 
-A small, production-minded teaching project that follows **Documents → OCR → Ingestion → Chunking → Embeddings → Reranking → RAG → Function Calling → Agent** using only fictional BitTeck data. Python 3.12, current LlamaIndex workflow agents, selectable Jina AI or local Ollama embedding/reranking, an OpenAI-compatible or local Ollama LLM, Streamlit, and async `redis-py` are used—without an arbitrary-code tool.
+A small, production-minded teaching project that follows **Documents → OCR → Ingestion → Chunking → Embeddings → Reranking → RAG → Function Calling → Agent** using only fictional BitTeck data. The default pipeline is fully local and uses Ollama for generation, embeddings, and reranking. OpenAI-compatible and Jina API models are an explicit opt-in in Streamlit.
 
 ## Architecture
 
@@ -47,13 +47,13 @@ User → Streamlit/CLI → Agent
 ```
 
 * **OCR** uses replaceable `OCRService` behavior backed by local Tesseract. It converts supported synthetic scans into plain text in `storage/ocr`; one bad scan is logged and does not stop batch OCR.
-* **Ingestion** loads both `data/*.txt` and `storage/ocr/*.txt`. A `SentenceSplitter` makes overlapping chunks; `jina-embeddings-v3` creates dense semantic vectors while `Qdrant/bm25` creates sparse lexical vectors. Both are stored in the `bitteck_knowledge` Qdrant collection.
+* **Ingestion** loads both `data/*.txt` and `storage/ocr/*.txt`. A `SentenceSplitter` makes overlapping chunks; Ollama’s `embeddinggemma` creates dense semantic vectors by default while `Qdrant/bm25` creates sparse lexical vectors. Both are stored in the `bitteck_knowledge` Qdrant collection.
 * **Hybrid retrieval** runs dense and BM25 searches together in Qdrant and fuses their candidates. `HYBRID_ALPHA=0.5` gives the semantic and lexical paths equal weight; `1.0` favors only dense similarity and `0.0` only sparse similarity.
-* **Reranking** sends the eight hybrid candidates to `jina-reranker-v2-base-multilingual`, which scores query/document relevance and keeps the best three. This makes the distinction between fast vector retrieval and more precise reranking visible in the workshop.
-* **RAG** embeds a question with Jina AI, reranks the nearest chunks, and asks the OpenAI-compatible LLM for a grounded answer with source filenames. It loads rather than rebuilds the persisted index.
+* **Reranking** sends the eight hybrid candidates to the local Ollama reranker by default, which scores query/document relevance and keeps the best three. Jina is available only in API mode.
+* **RAG** uses local Ollama by default to embed a question, rerank the nearest chunks, and produce a grounded answer with source filenames. It loads rather than rebuilds the persisted index.
 * **Function calling** lets the LLM select named functions while Python—not the model—does discount and tax arithmetic.
 * **Agent** is LlamaIndex's workflow `FunctionAgent`. It can search first and calculate second. Its system prompt is loaded only from `prompts/system_prompt.txt`.
-* **UI** is a small Streamlit chat application. Its sidebar switches between standalone RAG and Agent modes and shows the selected models; RAG messages display cache HIT/MISS and source files.
+* **UI** has no manual Agent/RAG switch: the agent infers the necessary tool from each question. A sidebar toggle explicitly opts into configured GPT-compatible and Jina APIs; it is off by default.
 * **Redis cache** is cache-aside: normalized questions are SHA-256 hashed, results expire after 600 seconds, and HIT/MISS/SET events are visible. The document/config fingerprint embedded in every key changes after indexing, making old answers unreachable without a costly key scan.
 * **Redis queue** atomically moves jobs from pending to processing and records each state in a job hash. Failed jobs are retried and ultimately retained as failed.
 * **Worker** performs slow OCR/ingestion away from the caller and shuts down cleanly on SIGINT/SIGTERM. An OCR job extracts the image and then updates the index.
@@ -70,7 +70,7 @@ BM25 is a **lexical ranking** algorithm: instead of asking whether two passages 
 
 A common form is `score(D,Q) = Σ IDF(q) × TF(q,D) × (k₁ + 1) / (TF(q,D) + k₁ × (1 - b + b × |D| / avgdl))`. Here `D` is a chunk, `Q` is the question, `|D|` is its length, and `avgdl` is the average chunk length. `k₁` controls term-frequency saturation and `b` controls length normalization.
 
-The trade-off is easy to demonstrate: dense retrieval can connect “money back” with “return policy”, while BM25 is particularly strong for an exact token such as `NovaBook`, `$1200`, or a policy identifier. The hybrid retriever combines both candidate lists, then the Jina reranker makes the final relevance decision. The teaching flow is therefore **Question → dense embedding + BM25 sparse query → Qdrant fusion → Jina reranking → context → LLM answer**.
+The trade-off is easy to demonstrate: dense retrieval can connect “money back” with “return policy”, while BM25 is particularly strong for an exact token such as `NovaBook`, `$1200`, or a policy identifier. The hybrid retriever combines both candidate lists, then the configured reranker makes the final relevance decision. The teaching flow is therefore **Question → dense embedding + BM25 sparse query → Qdrant fusion → Ollama reranking → context → local LLM answer**.
 
 ## Project tree
 
@@ -87,7 +87,7 @@ tests/{test_cache,test_queue,test_tools,test_rag}.py
 ## Setup and commands
 
 ```bash
-cp .env.example .env                 # add OpenAI-compatible and Jina AI keys
+cp .env.example .env                 # no API keys needed for the default path
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python -m src.main generate-data      # creates the two local PNG scans (not committed)
@@ -164,7 +164,7 @@ requests use `QDRANT_TIMEOUT` seconds (default `15`).
 
 ### Run with Ollama
 
-The default local generation model is Ollama's lightweight `gemma3:270m`.
+The default local generation model is Ollama's tool-capable `qwen3:4b`.
 Embedding and reranking can independently use Jina AI or Ollama. For a fully
 local pipeline set `EMBEDDING_PROVIDER=ollama` and
 `RERANKER_PROVIDER=ollama`; neither API key is then required.
@@ -172,11 +172,10 @@ local pipeline set `EMBEDDING_PROVIDER=ollama` and
 For a host-installed Ollama:
 
 ```bash
-ollama pull gemma3:270m
+ollama pull qwen3:4b
 ollama pull embeddinggemma
 ollama pull pdurugyan/qwen3-reranker-0.6b-q8_0
-# in .env: LLM_PROVIDER=ollama
-# in .env: EMBEDDING_PROVIDER=ollama and RERANKER_PROVIDER=ollama
+# .env.example already selects Ollama for all three providers
 python -m src.main rag "What is BitTeck's return policy?"
 streamlit run streamlit_app.py
 ```
@@ -188,18 +187,14 @@ root in this order:
 # 1. Create the runtime configuration. Do this only once.
 cp .env.example .env
 
-# 2. Edit .env and select the fully local providers:
-# LLM_PROVIDER=ollama
-# OLLAMA_MODEL=gemma3:270m
-# EMBEDDING_PROVIDER=ollama
-# RERANKER_PROVIDER=ollama
+# 2. The copied configuration already selects Ollama for all providers.
 
 # 3. Build the Python application image and start its dependencies.
 docker compose build
 docker compose --profile ollama up -d redis qdrant ollama
 
 # 4. Download the model into Ollama's persistent named volume.
-docker compose --profile ollama exec ollama ollama pull gemma3:270m
+docker compose --profile ollama exec ollama ollama pull qwen3:4b
 docker compose --profile ollama exec ollama ollama pull embeddinggemma
 docker compose --profile ollama exec ollama ollama pull pdurugyan/qwen3-reranker-0.6b-q8_0
 
@@ -249,7 +244,7 @@ Inside Compose, the application must reach Ollama at
 If a query reports a missing index, rerun step 6's `ingest` command. Provider
 errors identify whether the configured Jina or Ollama service needs attention.
 
-Switch `LLM_PROVIDER` back to `openai` to use `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `LLM_MODEL`. No application code changes are needed.
+In Streamlit, turn on **Enable API models** to use the configured OpenAI-compatible LLM and Jina retrieval models. Changing embedding models requires rebuilding the index with matching provider settings. CLI users can still explicitly select `openai` and `jina` through environment variables.
 
 ### GapGPT (OpenAI-compatible)
 
@@ -276,13 +271,13 @@ required for ingestion, hybrid retrieval, and reranking.
 | `OPENAI_API_KEY` | Required for grounded answer generation and agent operations |
 | `OPENAI_BASE_URL` | Optional OpenAI-compatible endpoint |
 | `LLM_MODEL` | `gpt-4o-mini` |
-| `LLM_PROVIDER` | `openai`; `gapgpt`, `openrouter`, and `openai-compatible` are accepted aliases, or use `ollama` for the local fallback |
+| `LLM_PROVIDER` | `ollama`; `openai`, `gapgpt`, `openrouter`, and `openai-compatible` opt into a hosted API |
 | `OLLAMA_BASE_URL` | `http://localhost:11434`; Compose overrides it to `http://ollama:11434` |
-| `OLLAMA_MODEL` | `gemma3:270m` (Gemma 3, 4B parameters) |
+| `OLLAMA_MODEL` | `qwen3:4b`, selected for local tool calling |
 | `OLLAMA_REQUEST_TIMEOUT` | `120` seconds, useful for local CPU inference |
 | `JINA_API_KEY` | Required only when either retrieval provider is `jina` |
-| `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL` | `jina`, `jina-embeddings-v3` |
-| `RERANKER_PROVIDER`, `RERANKER_MODEL` | `jina`, `jina-reranker-v2-base-multilingual` |
+| `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL` | `ollama` by default; API opt-in uses `jina-embeddings-v3` |
+| `RERANKER_PROVIDER`, `RERANKER_MODEL` | `ollama` by default; API opt-in uses `jina-reranker-v2-base-multilingual` |
 | `OLLAMA_EMBEDDING_MODEL` | `embeddinggemma` |
 | `OLLAMA_RERANKER_MODEL` | `pdurugyan/qwen3-reranker-0.6b-q8_0` |
 | `REDIS_URL` | `redis://localhost:6379/0` locally; Compose overrides host to `redis` |
@@ -308,4 +303,4 @@ No key is logged, baked into the image, or committed: Compose injects keys from 
 
 ## Tests and limitations
 
-Run `pytest -q` and `python -m compileall -q src scripts`; unit tests use fake Redis and no paid model call. The first BM25 use downloads its FastEmbed model. End-to-end ingestion/search requires Qdrant and a reachable Jina AI API, answer generation/agent execution requires a reachable OpenAI-compatible API, and OCR requires Tesseract. This educational queue keeps processing payloads recoverable but intentionally does not implement distributed leases or automatic recovery of a worker killed mid-job; an operator can inspect `workshop:queue:processing`.
+Run `pytest -q` and `python -m compileall -q src scripts`; unit tests use fake Redis and no paid model call. The first BM25 use downloads its FastEmbed model. End-to-end ingestion/search requires Qdrant and the pulled Ollama models by default; API mode additionally requires reachable Jina and OpenAI-compatible APIs. OCR requires Tesseract. This educational queue keeps processing payloads recoverable but intentionally does not implement distributed leases or automatic recovery of a worker killed mid-job; an operator can inspect `workshop:queue:processing`.

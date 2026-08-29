@@ -11,14 +11,14 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_base_url: str | None = None
     llm_model: str = "gpt-4o-mini"
-    llm_provider: str = "openai"
+    llm_provider: str = "ollama"
     ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "gemma3:270m"
+    ollama_model: str = "qwen3:4b"
     ollama_request_timeout: float = Field(120.0, gt=0)
     jina_api_key: str = ""
-    embedding_provider: str = "jina"
+    embedding_provider: str = "ollama"
     embedding_model: str = "jina-embeddings-v3"
-    reranker_provider: str = "jina"
+    reranker_provider: str = "ollama"
     reranker_model: str = "jina-reranker-v2-base-multilingual"
     ollama_embedding_model: str = "embeddinggemma"
     ollama_reranker_model: str = "pdurugyan/qwen3-reranker-0.6b-q8_0"
@@ -95,6 +95,23 @@ class Settings(BaseSettings):
             self.embedding_provider == "jina" or self.reranker_provider == "jina"
         ) and not self.jina_api_key:
             raise RuntimeError("JINA_API_KEY is missing; create a Jina AI key and add it to .env.")
+
+    def for_streamlit(self, enable_api_models: bool) -> "Settings":
+        """Return the explicit local or opt-in cloud provider configuration."""
+        providers = (
+            {
+                "llm_provider": "openai",
+                "embedding_provider": "jina",
+                "reranker_provider": "jina",
+            }
+            if enable_api_models
+            else {
+                "llm_provider": "ollama",
+                "embedding_provider": "ollama",
+                "reranker_provider": "ollama",
+            }
+        )
+        return self.model_copy(update=providers)
 
 @lru_cache
 def get_settings() -> Settings:

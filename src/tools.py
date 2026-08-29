@@ -1,4 +1,8 @@
 import logging
+from collections.abc import Callable, Coroutine
+from typing import Any
+
+from src.config import Settings
 from src.rag import query_knowledge_base
 log=logging.getLogger("TOOL")
 def _valid(value: float,name: str) -> float:
@@ -22,3 +26,17 @@ async def search_knowledge_base(question: str) -> str:
     log.info("TOOL SELECTED search_knowledge_base arguments=%s",question)
     result=await query_knowledge_base(question)
     return f"{result.answer}\nSources: {', '.join(result.sources) or 'none'}"
+
+
+def knowledge_search_tool(
+    settings: Settings,
+) -> Callable[[str], Coroutine[Any, Any, str]]:
+    """Bind retrieval to the same provider selection as the parent agent."""
+
+    async def search_knowledge_base(question: str) -> str:
+        """Search BitTeck products, prices, warranties, shipping, returns, FAQs, and company policies."""
+        log.info("TOOL SELECTED search_knowledge_base arguments=%s", question)
+        result = await query_knowledge_base(question, settings=settings)
+        return f"{result.answer}\nSources: {', '.join(result.sources) or 'none'}"
+
+    return search_knowledge_base
