@@ -5,11 +5,33 @@ import pytest
 from src.config import Settings
 from src.ingest import (
     async_qdrant_client,
+    embedding_setup_help,
     qdrant_client,
     qdrant_collection_exists,
     qdrant_vector_store,
     read_index_version,
 )
+
+
+def test_embedding_setup_help_explains_host_ollama_recovery() -> None:
+    settings = Settings(
+        ollama_base_url="http://localhost:11434",
+        ollama_embedding_model="embeddinggemma",
+    )
+
+    message = embedding_setup_help(settings)
+
+    assert "ollama pull embeddinggemma" in message
+    assert "http://localhost:11434" in message
+
+
+def test_embedding_setup_help_explains_compose_ollama_recovery() -> None:
+    settings = Settings(ollama_base_url="http://ollama:11434")
+
+    message = embedding_setup_help(settings)
+
+    assert "docker compose --profile ollama up -d ollama" in message
+    assert "docker compose --profile ollama exec ollama ollama pull" in message
 
 
 def test_missing_index_explains_docker_and_local_setup(tmp_path: Path) -> None:

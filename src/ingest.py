@@ -18,6 +18,28 @@ INDEX_SETUP_HELP = (
     "`python -m src.main ingest` (local Python)."
 )
 
+
+def embedding_setup_help(settings: Settings) -> str:
+    """Return provider-specific recovery steps for failed dense embeddings."""
+    if settings.embedding_provider == "ollama":
+        hostname = urlparse(settings.ollama_base_url).hostname
+        if hostname == "ollama":
+            return (
+                "Ollama is configured at 'http://ollama:11434'. Start the Compose "
+                "service with `docker compose --profile ollama up -d ollama`, then "
+                "pull the embedding model with `docker compose --profile ollama exec "
+                f"ollama ollama pull {settings.ollama_embedding_model}`."
+            )
+        return (
+            f"Ollama is configured at {settings.ollama_base_url!r}. Start Ollama and "
+            f"run `ollama pull {settings.ollama_embedding_model}`, then confirm the "
+            "configured URL is reachable."
+        )
+    return (
+        "Jina embeddings require a valid JINA_API_KEY and outbound HTTPS access to "
+        "the Jina API."
+    )
+
 def document_paths(settings: Settings) -> list[Path]:
     return sorted(settings.data_dir.glob("*.txt")) + sorted(settings.ocr_dir.glob("*.txt"))
 
@@ -143,7 +165,8 @@ def build_index(reindex: bool = False, settings: Settings | None = None) -> str:
             "running the BM25 sparse model, or while uploading vectors to Qdrant. "
             "Confirm the selected embedding service/model is available and Qdrant "
             "remains reachable. The first BM25 run may need "
-            "additional time to download its model. Set LOG_LEVEL=DEBUG for "
+            "additional time to download its model. "
+            f"{embedding_setup_help(settings)} Set LOG_LEVEL=DEBUG for "
             f"the underlying traceback. Original error: {type(exc).__name__}: {exc}"
         ) from exc
     version=fingerprint(settings)
