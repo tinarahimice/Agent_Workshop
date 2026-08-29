@@ -1,6 +1,6 @@
 # llm-agent-workshop
 
-A small, production-minded teaching project that follows **Documents → OCR → Ingestion → Chunking → Embeddings → Reranking → RAG → Function Calling → Agent** using only fictional BitTeck data. The default pipeline is fully local and uses Ollama for generation, embeddings, and reranking. OpenAI-compatible and Jina API models are an explicit opt-in in Streamlit.
+A small, production-minded teaching project that follows **Documents → OCR → Ingestion → Chunking → Embeddings → Reranking → RAG → Function Calling → Agent** using only fictional BitTeck data. The default pipeline is fully local and uses Ollama for generation and embeddings plus a dedicated FastEmbed cross-encoder for reranking. OpenAI-compatible and Jina API models are an explicit opt-in in Streamlit.
 
 ## Architecture
 
@@ -49,7 +49,7 @@ User → Streamlit/CLI → Agent
 * **OCR** uses replaceable `OCRService` behavior backed by local Tesseract. It converts supported synthetic scans into plain text in `storage/ocr`; one bad scan is logged and does not stop batch OCR.
 * **Ingestion** loads both `data/*.txt` and `storage/ocr/*.txt`. A `SentenceSplitter` makes overlapping chunks; Ollama’s `qwen3-embedding:0.6b` creates dense semantic vectors by default while `Qdrant/bm25` creates sparse lexical vectors. Both are stored in the `bitteck_knowledge` Qdrant collection.
 * **Hybrid retrieval** runs dense and BM25 searches together in Qdrant and fuses their candidates. `HYBRID_ALPHA=0.5` gives the semantic and lexical paths equal weight; `1.0` favors only dense similarity and `0.0` only sparse similarity.
-* **Reranking** sends the eight hybrid candidates to the local Ollama reranker by default, which scores query/document relevance and keeps the best three. Jina is available only in API mode.
+* **Reranking is mandatory after retrieval.** The default local path batch-scores every hybrid candidate with the dedicated `Xenova/ms-marco-MiniLM-L-6-v2` FastEmbed cross encoder, sorts candidates by the new scores, and keeps the best three. If scoring fails, the RAG request fails rather than silently using retrieval order. Jina is available in API mode.
 * **RAG** uses local Ollama by default to embed a question, rerank the nearest chunks, and produce a grounded answer with source filenames. It loads rather than rebuilds the persisted index.
 * **Function calling** lets the LLM select named functions while Python—not the model—does discount and tax arithmetic.
 * **Agent** is LlamaIndex's workflow `FunctionAgent`. It can search first and calculate second. Its system prompt is loaded only from `prompts/system_prompt.txt`.
@@ -70,7 +70,7 @@ BM25 is a **lexical ranking** algorithm: instead of asking whether two passages 
 
 A common form is `score(D,Q) = Σ IDF(q) × TF(q,D) × (k₁ + 1) / (TF(q,D) + k₁ × (1 - b + b × |D| / avgdl))`. Here `D` is a chunk, `Q` is the question, `|D|` is its length, and `avgdl` is the average chunk length. `k₁` controls term-frequency saturation and `b` controls length normalization.
 
-The trade-off is easy to demonstrate: dense retrieval can connect “money back” with “return policy”, while BM25 is particularly strong for an exact token such as `NovaBook`, `$1200`, or a policy identifier. The hybrid retriever combines both candidate lists, then the configured reranker makes the final relevance decision. The teaching flow is therefore **Question → dense embedding + BM25 sparse query → Qdrant fusion → Ollama reranking → context → local LLM answer**.
+The trade-off is easy to demonstrate: dense retrieval can connect “money back” with “return policy”, while BM25 is particularly strong for an exact token such as `NovaBook`, `$1200`, or a policy identifier. The hybrid retriever combines both candidate lists, then the configured reranker makes the final relevance decision. The teaching flow is therefore **Question → dense embedding + BM25 sparse query → Qdrant fusion → cross-encoder reranking → context → local LLM answer**.
 
 ## Project tree
 
@@ -165,17 +165,19 @@ requests use `QDRANT_TIMEOUT` seconds (default `15`).
 ### Run with Ollama
 
 The default local generation model is Ollama's tool-capable `qwen3:0.6b`.
-Embedding and reranking can independently use Jina AI or Ollama. For a fully
-local pipeline set `EMBEDDING_PROVIDER=ollama` and
-`RERANKER_PROVIDER=ollama`; neither API key is then required.
+Embedding can use Jina AI or Ollama, while reranking can use Jina AI or the
+dedicated local FastEmbed cross encoder. For a fully local pipeline set
+`EMBEDDING_PROVIDER=ollama` and `RERANKER_PROVIDER=fastembed`; neither API key
+is then required. FastEmbed downloads its reranker weights on the first query.
+Existing `.env` files must be changed from `RERANKER_PROVIDER=ollama` to
+`RERANKER_PROVIDER=fastembed`; `.env.example` updates do not overwrite them.
 
 For a host-installed Ollama:
 
 ```bash
 ollama pull qwen3:0.6b
 ollama pull qwen3-embedding:0.6b
-ollama pull pdurugyan/qwen3-reranker-0.6b-q8_0
-# .env.example already selects Ollama for all three providers
+# .env.example already selects the fully local providers
 python -m src.main rag "What is BitTeck's return policy?"
 streamlit run streamlit_app.py
 ```
@@ -196,7 +198,7 @@ docker compose --profile ollama up -d redis qdrant ollama
 # 4. Download the model into Ollama's persistent named volume.
 docker compose --profile ollama exec ollama ollama pull qwen3:0.6b
 docker compose --profile ollama exec ollama ollama pull qwen3-embedding:0.6b
-docker compose --profile ollama exec ollama ollama pull pdurugyan/qwen3-reranker-0.6b-q8_0
+# The FastEmbed reranker downloads automatically on the first RAG query.
 
 # 5. Confirm that Ollama can see the downloaded model.
 docker compose --profile ollama exec ollama ollama list
@@ -277,9 +279,9 @@ required for ingestion, hybrid retrieval, and reranking.
 | `OLLAMA_REQUEST_TIMEOUT` | `120` seconds, useful for local CPU inference |
 | `JINA_API_KEY` | Required only when either retrieval provider is `jina` |
 | `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL` | `ollama` by default; API opt-in uses `jina-embeddings-v3` |
-| `RERANKER_PROVIDER`, `RERANKER_MODEL` | `ollama` by default; API opt-in uses `jina-reranker-v2-base-multilingual` |
+| `RERANKER_PROVIDER`, `RERANKER_MODEL` | `fastembed` by default; API opt-in uses `jina-reranker-v2-base-multilingual` |
 | `OLLAMA_EMBEDDING_MODEL` | `qwen3-embedding:0.6b` |
-| `OLLAMA_RERANKER_MODEL` | `pdurugyan/qwen3-reranker-0.6b-q8_0` |
+| `FASTEMBED_RERANKER_MODEL` | Dedicated local cross encoder; defaults to `Xenova/ms-marco-MiniLM-L-6-v2` |
 | `REDIS_URL` | `redis://localhost:6379/0` locally; Compose overrides host to `redis` |
 | `QDRANT_URL`, `QDRANT_COLLECTION` | `http://localhost:6333`, `bitteck_knowledge`; Compose overrides the host to `qdrant` |
 | `QDRANT_TIMEOUT` | `15` seconds for Qdrant HTTP operations |

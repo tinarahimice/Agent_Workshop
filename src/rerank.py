@@ -1,58 +1,25 @@
-"""Node reranking through an Ollama-hosted yes/no reranker model."""
-import json
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+"""Local reranking with a dedicated FastEmbed cross-encoder model."""
+
+from typing import Any
 
 from llama_index.core.postprocessor.types import BaseNodePostprocessor
 from llama_index.core.schema import NodeWithScore, QueryBundle
-from pydantic import Field
+from pydantic import Field, PrivateAttr
 
 
-class OllamaRerank(BaseNodePostprocessor):
-    """Rank retrieved nodes with a local Qwen3 reranker served by Ollama.
+class FastEmbedRerank(BaseNodePostprocessor):
+    """Rerank every retrieved node with a dedicated cross encoder."""
 
-    Qwen3 rerankers answer ``yes`` or ``no`` for a query/document pair. Relevant
-    nodes are placed first, while the hybrid retrieval score provides stable
-    ordering within each group.
-    """
-
-    model: str
-    base_url: str = "http://localhost:11434"
-    request_timeout: float = Field(120.0, gt=0)
+    model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
     top_n: int = Field(3, ge=1)
+    _cross_encoder: Any = PrivateAttr(default=None)
 
-    def _is_relevant(self, query: str, document: str) -> bool:
-        prompt = (
-            "Judge whether the document is relevant to the query. "
-            "Answer with exactly yes or no.\n"
-            f"Query: {query}\nDocument: {document}"
-        )
-        request = Request(
-            f"{self.base_url.rstrip('/')}/api/generate",
-            data=json.dumps(
-                {
-                    "model": self.model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {"temperature": 0},
-                }
-            ).encode(),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urlopen(request, timeout=self.request_timeout) as response:
-                payload = json.load(response)
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
-            raise RuntimeError(
-                f"Ollama reranking failed at {self.base_url!r} with model "
-                f"{self.model!r}: {type(exc).__name__}: {exc}. Pull the model "
-                "and confirm Ollama is reachable."
-            ) from exc
-        answer = str(payload.get("response", "")).strip().lower()
-        if not answer:
-            raise RuntimeError("Ollama reranker returned an empty response")
-        return answer.startswith("yes")
+    def _get_cross_encoder(self) -> Any:
+        if self._cross_encoder is None:
+            from fastembed.rerank.cross_encoder import TextCrossEncoder
+
+            self._cross_encoder = TextCrossEncoder(model_name=self.model)
+        return self._cross_encoder
 
     def _postprocess_nodes(
         self,
@@ -60,13 +27,30 @@ class OllamaRerank(BaseNodePostprocessor):
         query_bundle: QueryBundle | None = None,
     ) -> list[NodeWithScore]:
         if query_bundle is None:
-            raise ValueError("OllamaRerank requires a query")
-        ranked = sorted(
+            raise ValueError("FastEmbedRerank requires a query")
+        if not nodes:
+            return []
+
+        documents = [node.node.get_content() for node in nodes]
+        try:
+            scores = list(
+                self._get_cross_encoder().rerank(query_bundle.query_str, documents)
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Dedicated local reranking failed with model {self.model!r}: "
+                f"{type(exc).__name__}: {exc}. Confirm the model can be downloaded "
+                "and the FastEmbed cache is writable."
+            ) from exc
+        if len(scores) != len(nodes):
+            raise RuntimeError(
+                "Dedicated reranker returned a different number of scores than documents"
+            )
+
+        for node, score in zip(nodes, scores, strict=True):
+            node.score = float(score)
+        return sorted(
             nodes,
-            key=lambda node: (
-                self._is_relevant(query_bundle.query_str, node.node.get_content()),
-                node.score if node.score is not None else float("-inf"),
-            ),
+            key=lambda node: node.score if node.score is not None else float("-inf"),
             reverse=True,
-        )
-        return ranked[: self.top_n]
+        )[: self.top_n]

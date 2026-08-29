@@ -58,7 +58,7 @@ def fingerprint(settings: Settings) -> str:
     digest.update(
         f"{settings.chunk_size}:{settings.chunk_overlap}:{settings.embedding_provider}:"
         f"{settings.embedding_model}:{settings.ollama_embedding_model}:"
-        f"{settings.reranker_provider}:{settings.reranker_model}:{settings.ollama_reranker_model}:"
+        f"{settings.reranker_provider}:{settings.reranker_model}:{settings.fastembed_reranker_model}:"
         f"{settings.qdrant_collection}:{settings.retrieval_top_k}:{settings.rerank_top_n}".encode()
     )
     for path in document_paths(settings): digest.update(path.name.encode()+path.read_bytes())

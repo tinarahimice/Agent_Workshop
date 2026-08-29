@@ -8,7 +8,7 @@ from src.config import Settings, get_settings
 from src.ingest import configure_embedding, qdrant_vector_store, read_index_version
 from src.llm import create_llm
 from src.redis_client import get_redis
-from src.rerank import OllamaRerank
+from src.rerank import FastEmbedRerank
 log=logging.getLogger("RAG")
 class RagResult(BaseModel):
     answer: str
@@ -20,7 +20,7 @@ def rag_cache_version(index_version: str, settings: Settings) -> str:
     """Invalidate answers when either indexed data or retrieval models change."""
     retrieval_config = (
         f"{settings.embedding_provider}:{settings.embedding_model}:{settings.ollama_embedding_model}:"
-        f"{settings.reranker_provider}:{settings.reranker_model}:{settings.ollama_reranker_model}:"
+        f"{settings.reranker_provider}:{settings.reranker_model}:{settings.fastembed_reranker_model}:"
         f"{settings.sparse_model}:{settings.hybrid_alpha}:{settings.qdrant_collection}:"
         f"{settings.retrieval_top_k}:{settings.rerank_top_n}:"
         f"{settings.llm_provider}:{settings.llm_model}:{settings.ollama_model}"
@@ -37,11 +37,9 @@ async def query_knowledge_base(question: str, settings: Settings | None = None, 
     if cached: return RagResult(**cached,cached=True)
     configure_embedding(settings)
     index=VectorStoreIndex.from_vector_store(qdrant_vector_store(settings))
-    if settings.reranker_provider == "ollama":
-        reranker = OllamaRerank(
-            model=settings.ollama_reranker_model,
-            base_url=settings.ollama_base_url,
-            request_timeout=settings.ollama_request_timeout,
+    if settings.reranker_provider == "fastembed":
+        reranker = FastEmbedRerank(
+            model=settings.fastembed_reranker_model,
             top_n=settings.rerank_top_n,
         )
     else:
