@@ -5,6 +5,17 @@ from typing import Any
 from src.config import Settings
 from src.rag import query_knowledge_base
 log=logging.getLogger("TOOL")
+
+
+def _user_safe_search_result(answer: str, sources: list[str]) -> str:
+    """Keep retrieval provenance in logs rather than the user-facing answer."""
+    log.info(
+        "TOOL RESULT search_knowledge_base sources=%s",
+        ", ".join(sources) or "none",
+    )
+    return answer
+
+
 def _valid(value: float,name: str) -> float:
     value=float(value)
     if value < 0: raise ValueError(f"{name} cannot be negative")
@@ -25,7 +36,7 @@ async def search_knowledge_base(question: str) -> str:
     """Search BitTeck products, prices, warranties, shipping, returns, FAQs, and company policies."""
     log.info("TOOL SELECTED search_knowledge_base arguments=%s",question)
     result=await query_knowledge_base(question)
-    return f"{result.answer}\nSources: {', '.join(result.sources) or 'none'}"
+    return _user_safe_search_result(result.answer, result.sources)
 
 
 def knowledge_search_tool(
@@ -37,6 +48,6 @@ def knowledge_search_tool(
         """Search BitTeck products, prices, warranties, shipping, returns, FAQs, and company policies."""
         log.info("TOOL SELECTED search_knowledge_base arguments=%s", question)
         result = await query_knowledge_base(question, settings=settings)
-        return f"{result.answer}\nSources: {', '.join(result.sources) or 'none'}"
+        return _user_safe_search_result(result.answer, result.sources)
 
     return search_knowledge_base
