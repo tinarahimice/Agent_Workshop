@@ -1,5 +1,6 @@
 """Tool-selecting LlamaIndex workflow agent."""
 import logging
+import re
 from collections.abc import Sequence
 from typing import TypedDict
 
@@ -10,6 +11,11 @@ from src.llm import create_llm
 from src.tools import calculate_discount, calculate_final_price, knowledge_search_tool
 
 log=logging.getLogger("AGENT")
+
+_SEARCH_CALL = re.compile(
+    r"<search_knowledge_base\b[^>]*\bquestion\s*=\s*([\"'])(?P<question>.*?)\1[^>]*/?>",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 class ConversationMessage(TypedDict):
@@ -39,5 +45,16 @@ async def run_agent(
         user_msg=question,
         chat_history=history,
     )
-    answer=str(response)
+    answer = str(response).strip()
+
+    # Small local models occasionally print an XML-like function call instead of
+    # handing it back to LlamaIndex.  That syntax is an implementation detail and
+    # must never become the assistant's user-facing answer.  Recover the intended
+    # search here and return its natural-language result instead.
+    search_call = _SEARCH_CALL.fullmatch(answer)
+    if search_call:
+        search_question = search_call.group("question").strip() or question
+        log.warning("Recovering unexecuted search tool call")
+        answer = await knowledge_search_tool(settings or get_settings())(search_question)
+
     log.info("FINAL ANSWER %s",answer); return answer
